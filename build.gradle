@@ -1,22 +1,9 @@
-buildscript {
-    repositories {
-        mavenCentral()
-        maven {
-            url = "https://maven.neoforged.net/releases"
-        }
-    }
-    dependencies {
-        classpath files("${System.getProperty('user.home')}/.gradle/caches/modules-2/files-2.1/net.neoforged/moddev-gradle/2.0.141/cf02dff073ef2f2a1ff6d4b41566c25470c26877/moddev-gradle-2.0.141.jar")
-    }
-}
-
 plugins {
     id 'java-library'
     id 'maven-publish'
     id 'idea'
+    id 'net.neoforged.moddev' version '2.0.141'
 }
-
-apply plugin: Class.forName('net.neoforged.moddevgradle.boot.ModDevPlugin')
 
 tasks.named('wrapper', Wrapper).configure {
     // Define wrapper values here so as to not have to always do so when updating gradlew.properties.
