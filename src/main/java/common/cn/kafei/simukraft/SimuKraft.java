@@ -20,6 +20,8 @@ import common.cn.kafei.simukraft.network.city.chunk.CityChunkSyncService;
 import common.cn.kafei.simukraft.network.hud.HudSyncService;
 import common.cn.kafei.simukraft.job.CityJobAssignmentService;
 import common.cn.kafei.simukraft.material.WorkMaterialPolicy;
+import common.cn.kafei.simukraft.path.CitizenNavigationService;
+import common.cn.kafei.simukraft.path.CitizenWanderService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import common.cn.kafei.simukraft.registry.ModCreativeModeTabs;
 import common.cn.kafei.simukraft.registry.ModEntities;
@@ -30,6 +32,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -62,6 +65,8 @@ public final class SimuKraft {
         NeoForge.EVENT_BUS.addListener(this::onRegisterCommands);
         NeoForge.EVENT_BUS.addListener(this::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(this::onLivingDeath);
+        NeoForge.EVENT_BUS.addListener(this::onBlockBreak);
+        NeoForge.EVENT_BUS.addListener(this::onBlockPlace);
         NeoForge.EVENT_BUS.addListener(this::onServerTick);
         NeoForge.EVENT_BUS.addListener(this::onServerStopping);
         LOGGER.info("Initializing {}", MOD_ID);
@@ -98,9 +103,23 @@ public final class SimuKraft {
         }
     }
 
+    private void onBlockBreak(BlockEvent.BreakEvent event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            CitizenNavigationService.invalidate(level, event.getPos());
+        }
+    }
+
+    private void onBlockPlace(BlockEvent.EntityPlaceEvent event) {
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+            CitizenNavigationService.invalidate(level, event.getPos());
+        }
+    }
+
     private void onServerTick(ServerTickEvent.Post event) {
         event.getServer().getAllLevels().forEach(level -> {
             CitizenManager.get(level).tick(level);
+            CitizenNavigationService.tick(level);
+            CitizenWanderService.tick(level);
             PlacedBuildingService.ensureCityPoisRegistered(level);
             CitizenHomeRestService.tick(level);
             BuilderConstructionService.tick(level);
@@ -129,6 +148,8 @@ public final class SimuKraft {
         ResidentialBedPoiService.clearServerCaches(event.getServer());
         CitizenHomeRestService.clearServerCaches(event.getServer());
         CityJobAssignmentService.clearServerCaches(event.getServer());
+        CitizenNavigationService.clearServerCaches(event.getServer());
+        CitizenWanderService.clearServerCaches(event.getServer());
         ResidentialRentService.clearServerCaches(event.getServer());
         HudSyncService.clearServerCaches(event.getServer());
         WorkMaterialPolicy.clearCache();

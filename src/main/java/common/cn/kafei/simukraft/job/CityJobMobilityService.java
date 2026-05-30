@@ -4,6 +4,8 @@ import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.citizen.CitizenTeleportService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
+import common.cn.kafei.simukraft.path.CitizenNavigationService;
+import common.cn.kafei.simukraft.path.MovementIntent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
@@ -44,7 +46,10 @@ public final class CityJobMobilityService {
             return;
         }
         Vec3 target = Vec3.atBottomCenterOf(workplacePos).add(0.0D, 1.0D, 0.0D);
-        CitizenTeleportService.teleportCitizen(level, citizenId, target);
+        boolean moving = CitizenNavigationService.requestMove(level, citizenId, target, MovementIntent.WORK);
+        if (!moving) {
+            CitizenTeleportService.teleportCitizen(level, citizenId, target);
+        }
         syncCitizenEntityState(citizenEntity, jobType, workStatus, statusLabel);
     }
 
@@ -56,6 +61,7 @@ public final class CityJobMobilityService {
         if (citizenEntity == null) {
             return;
         }
+        CitizenNavigationService.stop(level, citizenId);
         citizenEntity.getNavigation().stop();
         citizenEntity.setDeltaMovement(Vec3.ZERO);
         syncCitizenEntityState(citizenEntity, CityJobType.UNEMPLOYED, CitizenWorkStatus.IDLE, "");

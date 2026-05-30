@@ -3,7 +3,8 @@ package common.cn.kafei.simukraft.citizen;
 public enum CitizenWorkStatus {
     WORKING("work_status.working", "working"),
     IDLE("work_status.idle", "idle"),
-    RESTING("work_status.resting", "resting");
+    RESTING("work_status.resting", "resting"),
+    DEAD("work_status.dead", "dead");
 
     private final String translationKey;
     private final String legacyStatus;

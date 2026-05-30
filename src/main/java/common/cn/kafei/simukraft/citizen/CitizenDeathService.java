@@ -12,6 +12,7 @@ import common.cn.kafei.simukraft.entity.CitizenEntity;
 import common.cn.kafei.simukraft.job.CityJobAssignmentService;
 import common.cn.kafei.simukraft.network.building.controlbox.ResidentialControlBoxViewUpdatePacket;
 import common.cn.kafei.simukraft.network.hud.HudSyncService;
+import common.cn.kafei.simukraft.path.CitizenNavigationService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -31,10 +32,14 @@ public final class CitizenDeathService {
         if (data == null) {
             return;
         }
+        if (data.dead()) {
+            return;
+        }
         UUID oldHomeId = data.homeId();
         UUID cityId = data.cityId();
         BuilderConstructionService.interruptTask(level, data.uuid(), "citizen_died");
-        CitizenManager.get(level).removeCitizen(data.uuid());
+        CitizenNavigationService.stop(level, data.uuid());
+        CitizenManager.get(level).markCitizenDead(data.uuid(), level.getDayTime() / 24000L + 1L);
         if (cityId != null) {
             CityJobAssignmentService.invalidate(cityId);
         }

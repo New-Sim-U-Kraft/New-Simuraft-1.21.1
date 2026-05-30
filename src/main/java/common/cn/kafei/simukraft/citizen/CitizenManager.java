@@ -75,7 +75,9 @@ public final class CitizenManager extends SavedData {
         for (int i = 0; i < citizensTag.size(); i++) {
             CitizenData data = CitizenData.fromTag(citizensTag.getCompound(i));
             citizens.put(data.uuid(), data);
-            aiQueue.offer(data.uuid());
+            if (!data.dead()) {
+                aiQueue.offer(data.uuid());
+            }
         }
     }
 
@@ -94,6 +96,10 @@ public final class CitizenManager extends SavedData {
     public void syncEntity(CitizenEntity entity) {
         CitizenData data = entity != null ? citizens.get(entity.getUUID()) : null;
         if (data != null) {
+            if (data.dead()) {
+                entity.discard();
+                return;
+            }
             syncEntityFromData(entity, data);
         }
     }
@@ -125,6 +131,10 @@ public final class CitizenManager extends SavedData {
                 markDirtySoon();
             }
         }
+        if (data.dead()) {
+            entity.discard();
+            return data;
+        }
         if (!aiQueue.contains(data.uuid())) {
             aiQueue.offer(data.uuid());
         }
@@ -148,8 +158,26 @@ public final class CitizenManager extends SavedData {
             return 0L;
         }
         return citizens.values().stream()
-                .filter(data -> Objects.equals(cityId, data.cityId()))
+                .filter(data -> !data.dead() && Objects.equals(cityId, data.cityId()))
                 .count();
+    }
+
+    public int getWorldPopulation() {
+        long count = citizens.values().stream()
+                .filter(data -> !data.dead())
+                .count();
+        return Math.toIntExact(Math.min(Integer.MAX_VALUE, count));
+    }
+
+    public void markCitizenDead(UUID uuid, long deathDay) {
+        CitizenData data = uuid != null ? citizens.get(uuid) : null;
+        if (data == null) {
+            return;
+        }
+        data.markDead(deathDay);
+        aiQueue.remove(uuid);
+        saveCitizenIncremental(data);
+        setDirty();
     }
 
     public void removeCitizen(UUID uuid) {
@@ -168,7 +196,7 @@ public final class CitizenManager extends SavedData {
                 break;
             }
             CitizenData data = citizens.get(uuid);
-            if (data != null) {
+            if (data != null && !data.dead()) {
                 tickCitizenData(level, data);
                 aiQueue.offer(uuid);
                 processed++;
@@ -197,6 +225,9 @@ public final class CitizenManager extends SavedData {
     }
 
     private void tickCitizenData(ServerLevel level, CitizenData data) {
+        if (data.dead()) {
+            return;
+        }
         // 通过 UUID 错开居民状态更新时间，避免所有居民同一 tick 一起写库。
         if (level.getGameTime() % 200L == Math.floorMod(data.uuid().getLeastSignificantBits(), 200L)) {
             RandomSource random = level.random;
@@ -230,6 +261,9 @@ public final class CitizenManager extends SavedData {
         }
         entity.setSick(data.sick());
         entity.setChildNpc(data.child());
+        if (entity.level() instanceof ServerLevel level) {
+            CitizenJobVisualService.sync(level, entity, data);
+        }
     }
 
     private void markDirtySoon() {

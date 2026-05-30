@@ -151,6 +151,7 @@ public final class ResidentialControlBoxService {
             return List.of();
         }
         return CitizenManager.get(level).allCitizens().stream()
+                .filter(citizen -> !citizen.dead())
                 .filter(citizen -> homePoiIds.contains(citizen.homeId()))
                 .sorted(Comparator.comparing(citizen -> safeName(citizen.name())))
                 .map(citizen -> new ResidentialControlBoxView.ResidentEntry(citizen.uuid(), safeName(citizen.name())))

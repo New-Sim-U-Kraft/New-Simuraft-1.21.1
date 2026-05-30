@@ -59,7 +59,7 @@ public record NpcHireAssignPacket(BlockPos sourcePos, String sourceType, String 
             }
             CityJobType jobType = CityJobMobilityService.resolveHireRole(packet.role());
             UUID workplaceId = UUID.nameUUIDFromBytes((packet.sourceType() + ":" + packet.role() + "@" + packet.sourcePos().toShortString()).getBytes(StandardCharsets.UTF_8));
-            CitizenService.applyEmployment(level, citizen.uuid(), jobType, workplaceId, "");
+            CitizenService.applyEmployment(level, citizen.uuid(), jobType, workplaceId, packet.sourcePos(), "");
             CityJobMobilityService.teleportCitizenToWorkplace(level, citizen.uuid(), packet.sourcePos(), jobType, CitizenWorkStatus.WORKING, "");
             player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.success", citizen.name()), true);
         }

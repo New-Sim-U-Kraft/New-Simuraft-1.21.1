@@ -83,6 +83,9 @@ public final class ResidentialRentService {
         CityPoiManager poiManager = CityPoiManager.get(level);
         Set<UUID> occupiedHomes = new HashSet<>();
         for (CitizenData citizen : CitizenManager.get(level).allCitizens()) {
+            if (citizen.dead()) {
+                continue;
+            }
             if (citizen.cityId() == null || citizen.homeId() == null) {
                 continue;
             }

@@ -2,6 +2,7 @@ package client.cn.kafei.simukraft.mixin;
 
 import client.cn.kafei.simukraft.client.buildbox.BuildingPreviewScreen;
 import client.cn.kafei.simukraft.client.freecamera.FreeCameraManager;
+import client.cn.kafei.simukraft.client.path.NpcPathDebugRenderer;
 import net.minecraft.client.KeyboardHandler;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
@@ -12,8 +13,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(KeyboardHandler.class)
 public final class MixinKeyboardHandler {
-    @Inject(method = "keyPress", at = @At("HEAD"))
+    @Inject(method = "keyPress", at = @At("HEAD"), cancellable = true)
     private void simukraft$keyPress(long window, int key, int scanCode, int action, int modifiers, CallbackInfo callbackInfo) {
+        if (NpcPathDebugRenderer.handleToggleShortcut(window, key, action, modifiers)) {
+            callbackInfo.cancel();
+            return;
+        }
         if (!FreeCameraManager.isActive()) {
             return;
         }

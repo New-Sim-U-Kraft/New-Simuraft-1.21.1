@@ -69,6 +69,10 @@ public record BuildBoxStartConstructionPacket(BlockPos buildBoxPos,
             return;
         }
         CitizenData citizen = citizenOptional.get();
+        if (citizen.dead()) {
+            player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+            return;
+        }
         BuilderConstructionService.cancelTask(level, citizen.uuid());
         Optional<BuildingStructure> structureOptional = BuildingStructureService.loadStructure(packet.category(), packet.buildingFileName());
         if (structureOptional.isEmpty()) {
@@ -98,7 +102,7 @@ public record BuildBoxStartConstructionPacket(BlockPos buildBoxPos,
                 structure.poiDefinitions()
         );
         BuilderConstructionService.startTask(level, task);
-        CitizenService.applyEmployment(level, citizen.uuid(), CityJobType.BUILDER, workplaceId(packet.buildBoxPos(), "builder"), structure.displayName());
+        CitizenService.applyEmployment(level, citizen.uuid(), CityJobType.BUILDER, workplaceId(packet.buildBoxPos(), "builder"), packet.buildBoxPos(), structure.displayName());
         citizen.setWorkNeedDetail("build:" + task.taskId());
         citizen.setStatusLabel("建造中: " + structure.displayName());
         CitizenService.save(level, citizen.uuid());

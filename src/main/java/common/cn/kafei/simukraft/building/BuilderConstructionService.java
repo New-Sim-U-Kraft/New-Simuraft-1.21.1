@@ -6,6 +6,7 @@ import common.cn.kafei.simukraft.citizen.CitizenHousingService;
 import common.cn.kafei.simukraft.citizen.CitizenLevelService;
 import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.citizen.CitizenSkillSnapshot;
+import common.cn.kafei.simukraft.citizen.CitizenWorkplaceMoveService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
 import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
@@ -66,8 +67,12 @@ public final class BuilderConstructionService {
         // 先异步恢复 SQLite 中的未完成任务，再按 NPC 逐个推进施工。
         hydrateTasks(level, runtime);
         for (TaskRuntime taskRuntime : runtime.tasksByCitizen.values()) {
-            CitizenService.findCitizen(level, taskRuntime.task.citizenId())
-                    .ifPresent(citizen -> tickTask(level, citizen, runtime, taskRuntime));
+            Optional<CitizenData> citizen = CitizenService.findCitizen(level, taskRuntime.task.citizenId());
+            if (citizen.isEmpty() || citizen.get().dead()) {
+                interruptTask(level, taskRuntime.task.citizenId(), citizen.isPresent() ? "citizen_dead" : "citizen_missing");
+                continue;
+            }
+            tickTask(level, citizen.get(), runtime, taskRuntime);
         }
         if (level.getGameTime() % 40L == 0L) {
             flushDirtyTasks(level, runtime);
@@ -97,13 +102,40 @@ public final class BuilderConstructionService {
         SimuSqliteStorage.deleteBuildingTask(level, citizenId);
     }
 
+    // hasActiveBuildTask：供职业外观判断建筑师是否需要播放施工动作。
+    public static boolean hasActiveBuildTask(ServerLevel level, UUID citizenId) {
+        if (level == null || citizenId == null) {
+            return false;
+        }
+        TaskRuntime taskRuntime = runtime(level).tasksByCitizen.get(citizenId);
+        if (taskRuntime == null) {
+            return false;
+        }
+        BuildingTaskStatus status = BuildingTaskStatus.from(taskRuntime.task.status());
+        return taskRuntime.task.currentBlockIndex() < taskRuntime.task.totalBlocks()
+                && status != BuildingTaskStatus.COMPLETED
+                && status != BuildingTaskStatus.INTERRUPTED
+                && !status.isPaused();
+    }
+
+    // findBuildBoxPos：供上班恢复逻辑按市民找到当前施工控制盒，不触发额外扫描或数据库读取。
+    public static BlockPos findBuildBoxPos(ServerLevel level, UUID citizenId) {
+        if (level == null || citizenId == null) {
+            return null;
+        }
+        TaskRuntime taskRuntime = runtime(level).tasksByCitizen.get(citizenId);
+        return taskRuntime != null && taskRuntime.task != null ? taskRuntime.task.buildBoxPos() : null;
+    }
+
     public static void interruptTask(ServerLevel level, UUID citizenId, String reason) {
         if (level == null || citizenId == null) {
             return;
         }
         TaskRuntime removed = runtime(level).tasksByCitizen.remove(citizenId);
         if (removed != null) {
-            CitizenService.findCitizen(level, citizenId).ifPresent(citizen -> flushPendingBuilderXp(level, citizen, removed));
+            CitizenService.findCitizen(level, citizenId)
+                    .filter(citizen -> !citizen.dead())
+                    .ifPresent(citizen -> flushPendingBuilderXp(level, citizen, removed));
             BuildingTaskData interrupted = withStatus(removed.task, BuildingTaskStatus.INTERRUPTED);
             SimuSqliteStorage.saveBuildingTask(level, interrupted);
         }
@@ -136,7 +168,9 @@ public final class BuilderConstructionService {
             return;
         }
         runtime.tasksByCitizen.values().forEach(taskRuntime -> {
-            CitizenService.findCitizen(level, taskRuntime.task.citizenId()).ifPresent(citizen -> flushPendingBuilderXp(level, citizen, taskRuntime));
+            CitizenService.findCitizen(level, taskRuntime.task.citizenId())
+                    .filter(citizen -> !citizen.dead())
+                    .ifPresent(citizen -> flushPendingBuilderXp(level, citizen, taskRuntime));
             // 服务器关闭时统一标记离线暂停，避免重进游戏后任务被当作正在施工。
             BuildingTaskData paused = withStatus(taskRuntime.task, BuildingTaskStatus.PAUSED_OFFLINE);
             taskRuntime.task = paused;
@@ -267,11 +301,24 @@ public final class BuilderConstructionService {
         }
         try {
             loadFuture.join().forEach(task -> {
-                BuildingTaskData resumed = BuildingTaskStatus.from(task.status()) == BuildingTaskStatus.PAUSED_OFFLINE
+                boolean restoredFromOfflinePause = BuildingTaskStatus.from(task.status()) == BuildingTaskStatus.PAUSED_OFFLINE;
+                BuildingTaskData resumed = restoredFromOfflinePause
                         ? withStatus(task, BuildingTaskStatus.BUILDING)
                         : task;
-                runtime.tasksByCitizen.putIfAbsent(resumed.citizenId(), new TaskRuntime(resumed));
+                TaskRuntime taskRuntime = new TaskRuntime(resumed);
+                TaskRuntime existing = runtime.tasksByCitizen.putIfAbsent(resumed.citizenId(), taskRuntime);
                 primeStructureLoad(resumed);
+                if (existing == null && restoredFromOfflinePause && !shouldRest(level)) {
+                    taskRuntime.dirty = true;
+                    persistTaskAsync(level, taskRuntime, resumed);
+                    CitizenService.findCitizen(level, resumed.citizenId())
+                            .filter(citizen -> !citizen.dead())
+                            .ifPresent(citizen -> {
+                                citizen.setWorkStatus(CitizenWorkStatus.WORKING);
+                                CitizenService.save(level, citizen.uuid());
+                                CitizenWorkplaceMoveService.returnToWorkplace(level, citizen);
+                            });
+                }
             });
             runtime.hydrated = true;
         } catch (CompletionException exception) {
@@ -307,6 +354,7 @@ public final class BuilderConstructionService {
         }
         runtime.tasksByCitizen.values().forEach(taskRuntime ->
                 CitizenService.findCitizen(level, taskRuntime.task.citizenId())
+                        .filter(citizen -> !citizen.dead())
                         .ifPresent(citizen -> flushPendingBuilderXp(level, citizen, taskRuntime)));
     }
 
@@ -395,6 +443,7 @@ public final class BuilderConstructionService {
         citizen.setWorkStatus(CitizenWorkStatus.WORKING);
         CitizenService.save(level, citizen.uuid());
         persistTaskAsync(level, taskRuntime, resumed);
+        CitizenWorkplaceMoveService.returnToWorkplace(level, citizen);
         return resumed;
     }
 

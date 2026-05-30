@@ -51,6 +51,10 @@ public record NpcHireFirePacket(BlockPos sourcePos, String sourceType, String ro
                 return;
             }
             CitizenData citizen = citizenOptional.get();
+            if (citizen.dead()) {
+                player.displayClientMessage(Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()), true);
+                return;
+            }
             if (citizen.child()) {
                 player.displayClientMessage(Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()), true);
                 return;

@@ -62,6 +62,7 @@ public class BuildBoxBlock extends Block {
     private static void releaseAssignedCitizen(net.minecraft.server.level.ServerLevel level, BlockPos pos, String role) {
         UUID workplaceId = workplaceId(pos, role);
         CitizenManager.get(level).allCitizens().stream()
+                .filter(citizen -> !citizen.dead())
                 .filter(citizen -> workplaceId.equals(citizen.workplaceId()))
                 .map(CitizenData::uuid)
                 .toList()

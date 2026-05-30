@@ -22,6 +22,15 @@ public final class ServerConfig {
     private static final ModConfigSpec.BooleanValue BUILDER_PAUSE_AT_NIGHT;
     private static final ModConfigSpec.IntValue BUILDER_REST_START_TIME;
     private static final ModConfigSpec.IntValue BUILDER_REST_END_TIME;
+    private static final ModConfigSpec.IntValue PATH_MAX_LOADED_CITIZEN_ENTITIES;
+    private static final ModConfigSpec.IntValue PATH_MAX_ACTIVE_CITIZENS;
+    private static final ModConfigSpec.IntValue PATH_MAX_NEW_REQUESTS_PER_TICK;
+    private static final ModConfigSpec.IntValue PATH_WORKER_THREADS;
+    private static final ModConfigSpec.IntValue PATH_LOCAL_RADIUS_BLOCKS;
+    private static final ModConfigSpec.IntValue PATH_FAR_MOVEMENT_TELEPORT_DISTANCE;
+    private static final ModConfigSpec.IntValue PATH_REPATH_COOLDOWN_TICKS;
+    private static final ModConfigSpec.IntValue PATH_CACHE_TTL_TICKS;
+    private static final ModConfigSpec.BooleanValue PATH_DEBUG;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -122,6 +131,44 @@ public final class ServerConfig {
                         () -> "minecraft:bedrock",
                         ServerConfig::isStringEntry);
         builder.pop();
+        builder.push("npc_pathfinding");
+        PATH_MAX_LOADED_CITIZEN_ENTITIES = builder
+                .comment("Maximum loaded citizen entities allowed to start new pathing work.")
+                .translation("config.simukraft.npc_pathfinding.maxLoadedCitizenEntities")
+                .defineInRange("maxLoadedCitizenEntities", 180, 1, 1000);
+        PATH_MAX_ACTIVE_CITIZENS = builder
+                .comment("Maximum citizens that may actively follow custom paths at once.")
+                .translation("config.simukraft.npc_pathfinding.maxActivePathingCitizens")
+                .defineInRange("maxActivePathingCitizens", 64, 1, 5000);
+        PATH_MAX_NEW_REQUESTS_PER_TICK = builder
+                .comment("Maximum new path requests converted to snapshots per server tick.")
+                .translation("config.simukraft.npc_pathfinding.maxNewPathRequestsPerTick")
+                .defineInRange("maxNewPathRequestsPerTick", 3, 0, 32);
+        PATH_WORKER_THREADS = builder
+                .comment("Background worker threads used for pure snapshot path calculations.")
+                .translation("config.simukraft.npc_pathfinding.pathWorkerThreads")
+                .defineInRange("pathWorkerThreads", 4, 1, 16);
+        PATH_LOCAL_RADIUS_BLOCKS = builder
+                .comment("Maximum nearby pathing radius. Longer movement uses controlled teleport.")
+                .translation("config.simukraft.npc_pathfinding.localPathRadiusBlocks")
+                .defineInRange("localPathRadiusBlocks", 96, 16, 256);
+        PATH_FAR_MOVEMENT_TELEPORT_DISTANCE = builder
+                .comment("Distance where NPCs stop attempting full local pathing and teleport instead.")
+                .translation("config.simukraft.npc_pathfinding.farMovementTeleportDistance")
+                .defineInRange("farMovementTeleportDistance", 96, 16, 512);
+        PATH_REPATH_COOLDOWN_TICKS = builder
+                .comment("Cooldown after a failed path before the same NPC may request another path.")
+                .translation("config.simukraft.npc_pathfinding.repathCooldownTicks")
+                .defineInRange("repathCooldownTicks", 60, 0, 1200);
+        PATH_CACHE_TTL_TICKS = builder
+                .comment("Ticks before successful in-memory path cache entries expire.")
+                .translation("config.simukraft.npc_pathfinding.pathCacheTtlTicks")
+                .defineInRange("pathCacheTtlTicks", 1200, 0, 24000);
+        PATH_DEBUG = builder
+                .comment("Whether NPC pathfinding debug logs are enabled.")
+                .translation("config.simukraft.npc_pathfinding.debugPathfinding")
+                .define("debugPathfinding", false);
+        builder.pop();
         SPEC = builder.build();
     }
 
@@ -190,6 +237,42 @@ public final class ServerConfig {
 
     public static List<String> expertModeSkipList() {
         return copyStringList(EXPERT_MODE_SKIP_LIST.get());
+    }
+
+    public static int pathMaxLoadedCitizenEntities() {
+        return PATH_MAX_LOADED_CITIZEN_ENTITIES.get();
+    }
+
+    public static int pathMaxActiveCitizens() {
+        return PATH_MAX_ACTIVE_CITIZENS.get();
+    }
+
+    public static int pathMaxNewRequestsPerTick() {
+        return PATH_MAX_NEW_REQUESTS_PER_TICK.get();
+    }
+
+    public static int pathWorkerThreads() {
+        return PATH_WORKER_THREADS.get();
+    }
+
+    public static int pathLocalRadiusBlocks() {
+        return PATH_LOCAL_RADIUS_BLOCKS.get();
+    }
+
+    public static int pathFarMovementTeleportDistance() {
+        return PATH_FAR_MOVEMENT_TELEPORT_DISTANCE.get();
+    }
+
+    public static int pathRepathCooldownTicks() {
+        return PATH_REPATH_COOLDOWN_TICKS.get();
+    }
+
+    public static int pathCacheTtlTicks() {
+        return PATH_CACHE_TTL_TICKS.get();
+    }
+
+    public static boolean pathDebugEnabled() {
+        return PATH_DEBUG.get();
     }
 
     private static boolean isStringEntry(Object value) {

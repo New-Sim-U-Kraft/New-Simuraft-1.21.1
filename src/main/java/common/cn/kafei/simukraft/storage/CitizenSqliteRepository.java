@@ -90,6 +90,10 @@ public final class CitizenSqliteRepository {
                 SqliteNbtHelper.putNullableUuid(citizen, "CityId", resultSet.getString("city_id"));
                 SqliteNbtHelper.putNullableUuid(citizen, "HomeId", resultSet.getString("home_id"));
                 SqliteNbtHelper.putNullableUuid(citizen, "WorkplaceId", resultSet.getString("workplace_id"));
+                long workplacePosLong = resultSet.getLong("workplace_pos_long");
+                if (!resultSet.wasNull()) {
+                    citizen.putLong("WorkplacePos", workplacePosLong);
+                }
                 citizen.putDouble("Health", resultSet.getDouble("health"));
                 citizen.putDouble("Hunger", resultSet.getDouble("hunger"));
                 citizen.putDouble("Happiness", resultSet.getDouble("happiness"));
@@ -110,7 +114,7 @@ public final class CitizenSqliteRepository {
 
     private void saveCitizen(Connection connection, CompoundTag citizen) throws SQLException {
         String uuid = citizen.getUUID("Uuid").toString();
-        try (PreparedStatement citizenStatement = connection.prepareStatement("INSERT INTO citizens(uuid, name, gender, age, lifespan, job_type, job_id, status, work_status, work_need_detail, status_label, is_working, npc_id, skin_path, city_id, home_id, workplace_id, health, hunger, happiness, sick, child, child_growth_due_day, born_day) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET name = excluded.name, gender = excluded.gender, age = excluded.age, lifespan = excluded.lifespan, job_type = excluded.job_type, job_id = excluded.job_id, status = excluded.status, work_status = excluded.work_status, work_need_detail = excluded.work_need_detail, status_label = excluded.status_label, is_working = excluded.is_working, npc_id = excluded.npc_id, skin_path = excluded.skin_path, city_id = excluded.city_id, home_id = excluded.home_id, workplace_id = excluded.workplace_id, health = excluded.health, hunger = excluded.hunger, happiness = excluded.happiness, sick = excluded.sick, child = excluded.child, child_growth_due_day = excluded.child_growth_due_day, born_day = excluded.born_day");
+        try (PreparedStatement citizenStatement = connection.prepareStatement("INSERT INTO citizens(uuid, name, gender, age, lifespan, job_type, job_id, status, work_status, work_need_detail, status_label, is_working, npc_id, skin_path, city_id, home_id, workplace_id, workplace_pos_long, health, hunger, happiness, sick, child, child_growth_due_day, born_day) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(uuid) DO UPDATE SET name = excluded.name, gender = excluded.gender, age = excluded.age, lifespan = excluded.lifespan, job_type = excluded.job_type, job_id = excluded.job_id, status = excluded.status, work_status = excluded.work_status, work_need_detail = excluded.work_need_detail, status_label = excluded.status_label, is_working = excluded.is_working, npc_id = excluded.npc_id, skin_path = excluded.skin_path, city_id = excluded.city_id, home_id = excluded.home_id, workplace_id = excluded.workplace_id, workplace_pos_long = excluded.workplace_pos_long, health = excluded.health, hunger = excluded.hunger, happiness = excluded.happiness, sick = excluded.sick, child = excluded.child, child_growth_due_day = excluded.child_growth_due_day, born_day = excluded.born_day");
              PreparedStatement deleteSkills = connection.prepareStatement("DELETE FROM citizen_skills WHERE citizen_id = ?");
              PreparedStatement skillStatement = connection.prepareStatement("INSERT INTO citizen_skills(citizen_id, skill_key, skill_value) VALUES(?, ?, ?)")) {
             citizenStatement.setString(1, uuid);
@@ -130,13 +134,18 @@ public final class CitizenSqliteRepository {
             SqliteNbtHelper.setNullableString(citizenStatement, 15, citizen.hasUUID("CityId") ? citizen.getUUID("CityId").toString() : null);
             SqliteNbtHelper.setNullableString(citizenStatement, 16, citizen.hasUUID("HomeId") ? citizen.getUUID("HomeId").toString() : null);
             SqliteNbtHelper.setNullableString(citizenStatement, 17, citizen.hasUUID("WorkplaceId") ? citizen.getUUID("WorkplaceId").toString() : null);
-            citizenStatement.setDouble(18, citizen.getDouble("Health"));
-            citizenStatement.setDouble(19, citizen.getDouble("Hunger"));
-            citizenStatement.setDouble(20, citizen.getDouble("Happiness"));
-            citizenStatement.setInt(21, citizen.getBoolean("Sick") ? 1 : 0);
-            citizenStatement.setInt(22, citizen.getBoolean("Child") ? 1 : 0);
-            citizenStatement.setLong(23, citizen.getLong("ChildGrowthDueDay"));
-            citizenStatement.setLong(24, citizen.getLong("BornDay"));
+            if (citizen.contains("WorkplacePos")) {
+                citizenStatement.setLong(18, citizen.getLong("WorkplacePos"));
+            } else {
+                citizenStatement.setObject(18, null);
+            }
+            citizenStatement.setDouble(19, citizen.getDouble("Health"));
+            citizenStatement.setDouble(20, citizen.getDouble("Hunger"));
+            citizenStatement.setDouble(21, citizen.getDouble("Happiness"));
+            citizenStatement.setInt(22, citizen.getBoolean("Sick") ? 1 : 0);
+            citizenStatement.setInt(23, citizen.getBoolean("Child") ? 1 : 0);
+            citizenStatement.setLong(24, citizen.getLong("ChildGrowthDueDay"));
+            citizenStatement.setLong(25, citizen.getLong("BornDay"));
             citizenStatement.executeUpdate();
             deleteSkills.setString(1, uuid);
             deleteSkills.executeUpdate();

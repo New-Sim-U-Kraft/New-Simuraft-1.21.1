@@ -3,6 +3,7 @@ package common.cn.kafei.simukraft.network.npc.state;
 import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenManager;
+import common.cn.kafei.simukraft.citizen.CitizenService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -60,8 +61,12 @@ public record EmploymentStateResponsePacket(BlockPos sourcePos, String sourceTyp
             CitizenManager manager = CitizenManager.get(level);
             UUID builderWorkplaceId = workplaceId(packet.sourceType(), "builder", packet.sourcePos());
             UUID plannerWorkplaceId = workplaceId(packet.sourceType(), "planner", packet.sourcePos());
-            UUID builderCitizenId = findCitizenByWorkplace(manager, builderWorkplaceId).map(CitizenData::uuid).orElse(null);
-            UUID plannerCitizenId = findCitizenByWorkplace(manager, plannerWorkplaceId).map(CitizenData::uuid).orElse(null);
+            Optional<CitizenData> builderCitizen = findCitizenByWorkplace(manager, builderWorkplaceId);
+            Optional<CitizenData> plannerCitizen = findCitizenByWorkplace(manager, plannerWorkplaceId);
+            builderCitizen.ifPresent(citizen -> backfillWorkplacePos(level, citizen, packet.sourcePos()));
+            plannerCitizen.ifPresent(citizen -> backfillWorkplacePos(level, citizen, packet.sourcePos()));
+            UUID builderCitizenId = builderCitizen.map(CitizenData::uuid).orElse(null);
+            UUID plannerCitizenId = plannerCitizen.map(CitizenData::uuid).orElse(null);
             String statusKey = builderCitizenId != null || plannerCitizenId != null ? "gui.build_box.status_working" : "gui.build_box.status_idle";
             PacketDistributor.sendToPlayer(player, new EmploymentStateResponsePacket(packet.sourcePos(), packet.sourceType(), builderCitizenId, plannerCitizenId, statusKey));
         }
@@ -77,8 +82,18 @@ public record EmploymentStateResponsePacket(BlockPos sourcePos, String sourceTyp
 
     private static Optional<CitizenData> findCitizenByWorkplace(CitizenManager manager, UUID workplaceId) {
         return manager.allCitizens().stream()
+                .filter(data -> !data.dead())
                 .filter(data -> workplaceId.equals(data.workplaceId()))
                 .findFirst();
+    }
+
+    // backfillWorkplacePos：打开工作方块界面时修复旧存档缺失的岗位坐标。
+    private static void backfillWorkplacePos(ServerLevel level, CitizenData citizen, BlockPos workplacePos) {
+        if (citizen == null || workplacePos == null || workplacePos.equals(citizen.workplacePos())) {
+            return;
+        }
+        citizen.setWorkplacePos(workplacePos);
+        CitizenService.save(level, citizen.uuid());
     }
 
     private static UUID workplaceId(String sourceType, String role, BlockPos pos) {

@@ -65,6 +65,7 @@ public final class PlacedBuildingDemolitionService {
             return;
         }
         CitizenManager.get(level).allCitizens().stream()
+                .filter(citizen -> !citizen.dead())
                 .filter(citizen -> homePoiIds.contains(citizen.homeId()))
                 .map(CitizenData::uuid)
                 .toList()

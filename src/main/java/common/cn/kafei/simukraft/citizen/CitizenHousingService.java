@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.List;
@@ -12,6 +13,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+@SuppressWarnings("null")
 public final class CitizenHousingService {
     private CitizenHousingService() {
     }
@@ -30,6 +32,7 @@ public final class CitizenHousingService {
         }
         CityPoiManager poiManager = CityPoiManager.get(level);
         List<CitizenData> homelessCitizens = CitizenManager.get(level).allCitizens().stream()
+                .filter(citizen -> !citizen.dead())
                 .filter(citizen -> cityId.equals(citizen.cityId()) && !hasValidHome(poiManager, cityId, citizen.homeId()))
                 .sorted(Comparator.comparing(CitizenData::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -53,7 +56,8 @@ public final class CitizenHousingService {
                 break;
             }
             CityPoiData home = vacantHomes.getFirst();
-            var citizen = CitizenService.spawnCitizen(level, spawnPos, cityId, true);
+            Vec3 spawnTarget = resolveNewResidentSpawnTarget(level, home, spawnPos);
+            var citizen = CitizenService.spawnCitizen(level, spawnTarget, cityId, true);
             if (citizen.isEmpty()) {
                 break;
             }
@@ -70,9 +74,20 @@ public final class CitizenHousingService {
         return vacantHomes(level, cityId).size();
     }
 
+    private static Vec3 resolveNewResidentSpawnTarget(ServerLevel level, CityPoiData home, BlockPos fallbackPos) {
+        if (home != null) {
+            Vec3 homeTarget = CitizenHomeRestService.resolveHomeTarget(level, home.pos());
+            if (homeTarget != null) {
+                return homeTarget;
+            }
+        }
+        return Vec3.atBottomCenterOf(fallbackPos).add(0.0D, 1.0D, 0.0D);
+    }
+
     private static List<CityPoiData> vacantHomes(ServerLevel level, UUID cityId) {
         CityPoiManager poiManager = CityPoiManager.get(level);
         Set<UUID> occupiedHomes = CitizenManager.get(level).allCitizens().stream()
+                .filter(citizen -> !citizen.dead())
                 .filter(citizen -> cityId.equals(citizen.cityId()) && hasValidHome(poiManager, cityId, citizen.homeId()))
                 .map(CitizenData::homeId)
                 .collect(Collectors.toSet());

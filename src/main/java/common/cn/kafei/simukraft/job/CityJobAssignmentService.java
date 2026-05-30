@@ -31,7 +31,7 @@ public final class CityJobAssignmentService {
             return JobAssignmentResult.INVALID_JOB;
         }
         Optional<CitizenData> citizen = CitizenService.findCitizen(level, citizenId);
-        if (citizen.isEmpty()) {
+        if (citizen.isEmpty() || citizen.get().dead()) {
             return JobAssignmentResult.CITIZEN_NOT_FOUND;
         }
         UUID cityId = citizen.get().cityId();
@@ -50,7 +50,7 @@ public final class CityJobAssignmentService {
             return JobAssignmentResult.CITIZEN_NOT_FOUND;
         }
         Optional<CitizenData> citizen = CitizenService.findCitizen(level, citizenId);
-        if (citizen.isEmpty()) {
+        if (citizen.isEmpty() || citizen.get().dead()) {
             return JobAssignmentResult.CITIZEN_NOT_FOUND;
         }
         CitizenData data = citizen.get();
@@ -99,7 +99,7 @@ public final class CityJobAssignmentService {
         if (assignedAtPoi >= poi.capacity()) {
             return JobAssignmentResult.NO_CAPACITY;
         }
-        CitizenService.applyEmployment(level, citizen.uuid(), jobType, poi.poiId(), citizen.statusLabel());
+        CitizenService.applyEmployment(level, citizen.uuid(), jobType, poi.poiId(), poi.pos(), citizen.statusLabel());
         invalidate(cityId);
         return JobAssignmentResult.ASSIGNED;
     }

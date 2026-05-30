@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -36,6 +37,7 @@ public class CitizenEntity extends PathfinderMob {
     private static final EntityDataAccessor<Integer> DATA_LIFESPAN = SynchedEntityData.defineId(CitizenEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> DATA_IS_SICK = SynchedEntityData.defineId(CitizenEntity.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> DATA_IS_CHILD = SynchedEntityData.defineId(CitizenEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> DATA_HAS_ACTIVE_TASK = SynchedEntityData.defineId(CitizenEntity.class, EntityDataSerializers.BOOLEAN);
 
     public CitizenEntity(EntityType<? extends PathfinderMob> entityType, Level level) {
         super(entityType, level);
@@ -74,6 +76,7 @@ public class CitizenEntity extends PathfinderMob {
         builder.define(DATA_LIFESPAN, -1);
         builder.define(DATA_IS_SICK, false);
         builder.define(DATA_IS_CHILD, false);
+        builder.define(DATA_HAS_ACTIVE_TASK, false);
     }
 
     @Override
@@ -86,6 +89,9 @@ public class CitizenEntity extends PathfinderMob {
     @Override
     public void tick() {
         super.tick();
+        if (!canSyncCitizenData()) {
+            return;
+        }
         if (level() instanceof ServerLevel serverLevel) {
             // 同 UUID 重复实体只保留一个，防止未加载区块中的旧实体回来后复制居民。
             if (common.cn.kafei.simukraft.citizen.CitizenTeleportService.reconcileLoadedCitizenEntities(serverLevel, getUUID(), null) != this) {
@@ -94,6 +100,20 @@ public class CitizenEntity extends PathfinderMob {
             // 实体每 tick 确保自己有 CitizenData，数据缺失时会自动补全。
             common.cn.kafei.simukraft.citizen.CitizenService.ensureCitizen(serverLevel, this);
         }
+    }
+
+    // canSyncCitizenData：死亡实体在真正移除前仍可能 tick，不能在这个窗口重建 CitizenData。
+    private boolean canSyncCitizenData() {
+        return !isRemoved() && isAlive() && getHealth() > 0.0F;
+    }
+
+    @Override
+    public float getAttackAnim(float partialTick) {
+        if (hasActiveVisualTask()) {
+            float continuous = Mth.sin((tickCount + partialTick) / 2.0F) / 20.0F + 0.05F;
+            return Math.max(super.getAttackAnim(partialTick), continuous);
+        }
+        return super.getAttackAnim(partialTick);
     }
 
     @Override
@@ -222,6 +242,15 @@ public class CitizenEntity extends PathfinderMob {
 
     public void setChildNpc(boolean childNpc) {
         this.entityData.set(DATA_IS_CHILD, childNpc);
+    }
+
+    public boolean hasActiveVisualTask() {
+        return this.entityData.get(DATA_HAS_ACTIVE_TASK);
+    }
+
+    // setHasActiveVisualTask：同步客户端手臂动作开关，参考旧版 DATA_HAS_ACTIVE_TASK。
+    public void setHasActiveVisualTask(boolean active) {
+        this.entityData.set(DATA_HAS_ACTIVE_TASK, active);
     }
 
     public String getHungerLevelKey() {

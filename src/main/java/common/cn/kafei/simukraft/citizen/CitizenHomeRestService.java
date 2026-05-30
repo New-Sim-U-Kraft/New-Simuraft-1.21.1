@@ -6,6 +6,8 @@ import common.cn.kafei.simukraft.city.poi.CityPoiType;
 import common.cn.kafei.simukraft.config.ServerConfig;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
 import common.cn.kafei.simukraft.job.CityJobType;
+import common.cn.kafei.simukraft.path.CitizenNavigationService;
+import common.cn.kafei.simukraft.path.MovementIntent;
 import common.cn.kafei.simukraft.util.SaveScopedCacheKey;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -58,6 +60,9 @@ public final class CitizenHomeRestService {
         CityPoiManager poiManager = CityPoiManager.get(level);
         CitizenManager manager = CitizenManager.get(level);
         for (CitizenData citizen : manager.allCitizens()) {
+            if (citizen.dead()) {
+                continue;
+            }
             if (citizen.homeId() == null) {
                 continue;
             }
@@ -70,7 +75,7 @@ public final class CitizenHomeRestService {
                 CitizenTeleportService.reconcileLoadedCitizenEntities(level, citizen.uuid(), homeTarget);
                 continue;
             }
-            if (CitizenTeleportService.teleportOrSpawnCitizen(level, citizen, homeTarget)) {
+            if (moveOrTeleportHome(level, citizen, homeTarget)) {
                 citizen.setWorkStatus(CitizenWorkStatus.RESTING);
                 citizen.setStatusLabel("夜间回家休息");
                 citizen.setWorkNeedDetail(HOME_REST_MARKER);
@@ -80,9 +85,20 @@ public final class CitizenHomeRestService {
         }
     }
 
+    private static boolean moveOrTeleportHome(ServerLevel level, CitizenData citizen, Vec3 homeTarget) {
+        CitizenEntity entity = CitizenTeleportService.findCitizenEntity(level, citizen.uuid());
+        if (entity != null && CitizenNavigationService.requestMove(level, citizen.uuid(), homeTarget, MovementIntent.RETURN_HOME)) {
+            return true;
+        }
+        return CitizenTeleportService.teleportOrSpawnCitizen(level, citizen, homeTarget);
+    }
+
     private static void restoreHomeRestingCitizens(ServerLevel level) {
         CitizenManager manager = CitizenManager.get(level);
         for (CitizenData citizen : manager.allCitizens()) {
+            if (citizen.dead()) {
+                continue;
+            }
             if (!HOME_REST_MARKER.equals(citizen.workNeedDetail())) {
                 continue;
             }
@@ -96,6 +112,9 @@ public final class CitizenHomeRestService {
             CitizenEntity entity = CitizenTeleportService.findCitizenEntity(level, citizen.uuid());
             if (entity != null) {
                 manager.syncEntity(entity);
+            }
+            if (nextStatus == CitizenWorkStatus.WORKING) {
+                CitizenWorkplaceMoveService.returnToWorkplace(level, citizen);
             }
         }
     }
@@ -119,7 +138,8 @@ public final class CitizenHomeRestService {
         RESTED_CITIZENS_BY_LEVEL.keySet().removeIf(key -> key.startsWith(serverKey + "|"));
     }
 
-    private static Vec3 resolveHomeTarget(ServerLevel level, BlockPos homePos) {
+    // resolveHomeTarget：解析住宅床边的安全脚底坐标，供回家和新入住生成共用。
+    public static Vec3 resolveHomeTarget(ServerLevel level, BlockPos homePos) {
         BlockPos anchor = resolveHomeAnchor(level, homePos);
         List<BlockPos> bedsideCandidates = collectBedsideCandidates(level, anchor);
         if (!bedsideCandidates.isEmpty()) {

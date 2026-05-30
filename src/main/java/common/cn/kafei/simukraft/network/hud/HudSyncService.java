@@ -39,7 +39,7 @@ public final class HudSyncService {
         Optional<CityData> city = CityService.findPlayerCity(level, player.getUUID());
         int currentDay = (int) Math.max(1L, level.getDayTime() / 24000L + 1L);
         boolean creativeMode = player.isCreative();
-        int worldPopulation = CitizenManager.get(level).allCitizens().size();
+        int worldPopulation = CitizenManager.get(level).getWorldPopulation();
         HudState state = city.map(cityData -> {
             CityPermissionLevel permissionLevel = CityService.getPlayerPermission(cityData, player.getUUID());
             return new HudState(

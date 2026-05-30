@@ -1,6 +1,7 @@
 package common.cn.kafei.simukraft.citizen;
 
 import common.cn.kafei.simukraft.job.CityJobType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.Objects;
@@ -23,17 +24,20 @@ public final class CitizenData {
     private UUID cityId;
     private UUID homeId;
     private UUID workplaceId;
+    private BlockPos workplacePos;
     private double health;
     private double hunger;
     private double happiness;
     private boolean sick;
     private boolean child;
     private boolean working;
+    private boolean dead;
     private String workNeedDetail;
     private String statusLabel;
     private int npcId;
     private long childGrowthDueDay;
     private long bornDay;
+    private long deathDay;
     private final ConcurrentMap<String, Integer> skills = new ConcurrentHashMap<>();
 
     public CitizenData(UUID uuid) {
@@ -53,6 +57,8 @@ public final class CitizenData {
         this.health = 20.0D;
         this.hunger = 20.0D;
         this.happiness = 50.0D;
+        this.dead = false;
+        this.deathDay = 0L;
     }
 
     public static CitizenData fromTag(CompoundTag tag) {
@@ -76,6 +82,7 @@ public final class CitizenData {
         data.cityId = tag.hasUUID("CityId") ? tag.getUUID("CityId") : null;
         data.homeId = tag.hasUUID("HomeId") ? tag.getUUID("HomeId") : null;
         data.workplaceId = tag.hasUUID("WorkplaceId") ? tag.getUUID("WorkplaceId") : null;
+        data.workplacePos = tag.contains("WorkplacePos") ? BlockPos.of(tag.getLong("WorkplacePos")) : null;
         data.health = tag.getDouble("Health");
         data.hunger = tag.getDouble("Hunger");
         data.happiness = tag.getDouble("Happiness");
@@ -83,6 +90,8 @@ public final class CitizenData {
         data.child = tag.getBoolean("Child");
         data.childGrowthDueDay = tag.getLong("ChildGrowthDueDay");
         data.bornDay = tag.getLong("BornDay");
+        data.dead = tag.getBoolean("Dead");
+        data.deathDay = tag.getLong("DeathDay");
         CompoundTag skillTag = tag.getCompound("Skills");
         for (String key : skillTag.getAllKeys()) {
             data.skills.put(key, skillTag.getInt(key));
@@ -116,6 +125,9 @@ public final class CitizenData {
         if (workplaceId != null) {
             tag.putUUID("WorkplaceId", workplaceId);
         }
+        if (workplacePos != null) {
+            tag.putLong("WorkplacePos", workplacePos.asLong());
+        }
         tag.putDouble("Health", health);
         tag.putDouble("Hunger", hunger);
         tag.putDouble("Happiness", happiness);
@@ -123,6 +135,8 @@ public final class CitizenData {
         tag.putBoolean("Child", child);
         tag.putLong("ChildGrowthDueDay", childGrowthDueDay);
         tag.putLong("BornDay", bornDay);
+        tag.putBoolean("Dead", dead);
+        tag.putLong("DeathDay", deathDay);
         CompoundTag skillTag = new CompoundTag();
         skills.forEach(skillTag::putInt);
         tag.put("Skills", skillTag);
@@ -160,6 +174,9 @@ public final class CitizenData {
         if (skinPath == null) {
             skinPath = "";
         }
+        if (workplaceId == null) {
+            workplacePos = null;
+        }
         if (lifespan <= 0) {
             lifespan = 80;
         }
@@ -168,6 +185,13 @@ public final class CitizenData {
         }
         if (hunger <= 0.0D) {
             hunger = 20.0D;
+        }
+        if (dead) {
+            health = 0.0D;
+            deathDay = Math.max(1L, deathDay);
+            workStatus = CitizenWorkStatus.DEAD;
+            status = workStatus.legacyStatus();
+            working = false;
         }
     }
 
@@ -237,6 +261,10 @@ public final class CitizenData {
     }
 
     public void setStatus(String status) {
+        if (dead) {
+            this.status = CitizenWorkStatus.DEAD.legacyStatus();
+            return;
+        }
         this.status = (status == null || status.isBlank()) ? "idle" : status;
     }
 
@@ -249,6 +277,12 @@ public final class CitizenData {
     }
 
     public void setWorkStatus(CitizenWorkStatus workStatus) {
+        if (dead) {
+            this.workStatus = CitizenWorkStatus.DEAD;
+            this.status = CitizenWorkStatus.DEAD.legacyStatus();
+            this.working = false;
+            return;
+        }
         this.workStatus = workStatus != null ? workStatus : CitizenWorkStatus.IDLE;
         this.status = this.workStatus.legacyStatus();
         this.working = this.workStatus == CitizenWorkStatus.WORKING;
@@ -318,6 +352,14 @@ public final class CitizenData {
         this.workplaceId = workplaceId;
     }
 
+    public BlockPos workplacePos() {
+        return workplacePos;
+    }
+
+    public void setWorkplacePos(BlockPos workplacePos) {
+        this.workplacePos = workplacePos != null ? workplacePos.immutable() : null;
+    }
+
     public double hunger() {
         return hunger;
     }
@@ -327,6 +369,10 @@ public final class CitizenData {
     }
 
     public void setHealth(double health) {
+        if (dead) {
+            this.health = 0.0D;
+            return;
+        }
         this.health = Math.clamp(health, 0.0D, 20.0D);
     }
 
@@ -346,6 +392,27 @@ public final class CitizenData {
         this.child = child;
     }
 
+    public boolean dead() {
+        return dead;
+    }
+
+    public long deathDay() {
+        return deathDay;
+    }
+
+    // markDead：保留市民档案，但让其退出人口、岗位和 AI 调度。
+    public void markDead(long deathDay) {
+        this.dead = true;
+        this.deathDay = Math.max(1L, deathDay);
+        this.health = 0.0D;
+        this.hunger = 0.0D;
+        this.workStatus = CitizenWorkStatus.DEAD;
+        this.status = CitizenWorkStatus.DEAD.legacyStatus();
+        this.working = false;
+        this.workNeedDetail = "";
+        this.statusLabel = "";
+    }
+
     public long childGrowthDueDay() {
         return childGrowthDueDay;
     }
@@ -355,6 +422,10 @@ public final class CitizenData {
     }
 
     public void setHunger(double hunger) {
+        if (dead) {
+            this.hunger = 0.0D;
+            return;
+        }
         this.hunger = Math.clamp(hunger, 0.0D, 20.0D);
     }
 

@@ -38,6 +38,9 @@ public final class CitizenTeleportService {
         if (level == null || data == null || target == null) {
             return false;
         }
+        if (data.dead()) {
+            return false;
+        }
         // 先合并已加载的同 UUID 实体；找不到时才按居民数据补生成实体。
         CitizenEntity citizenEntity = reconcileLoadedCitizenEntities(level, data.uuid(), target);
         if (citizenEntity == null) {
