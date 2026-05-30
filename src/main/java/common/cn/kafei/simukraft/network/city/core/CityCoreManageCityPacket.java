@@ -7,6 +7,7 @@ import common.cn.kafei.simukraft.city.CityPermissionLevel;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.network.city.chunk.CityChunkSyncService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -52,12 +53,12 @@ public record CityCoreManageCityPacket(BlockPos pos, Action action, String value
 
     private static void handleAction(ServerLevel level, ServerPlayer player, CityCoreManageCityPacket packet) {
         if (!player.blockPosition().closerThan(packet.pos(), 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.too_far"));
             return;
         }
         Optional<CityData> city = CityService.findCityByCorePosForPlayer(level, packet.pos(), player.getUUID());
         if (city.isEmpty()) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.not_found"));
             return;
         }
         UUID cityId = city.get().cityId();
@@ -71,24 +72,34 @@ public record CityCoreManageCityPacket(BlockPos pos, Action action, String value
     private static void renameCity(ServerLevel level, ServerPlayer player, UUID cityId, BlockPos pos, String rawName) {
         String cityName = normalizeCityName(rawName);
         if (!isValidCityName(cityName)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.invalid_name"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.invalid_name"));
             CityCoreOpenRequestPacket.openFor(level, player, pos);
             return;
         }
         boolean renamed = CityService.renameCity(level, cityId, player.getUUID(), cityName);
-        player.displayClientMessage(Component.translatable(renamed ? "message.simukraft.city_core.renamed" : "message.simukraft.city_core.rename_failed", cityName), true);
+        Component message = Component.translatable(renamed ? "message.simukraft.city_core.renamed" : "message.simukraft.city_core.rename_failed", cityName);
+        if (renamed) {
+            InfoToastService.success(player, message);
+        } else {
+            InfoToastService.warning(player, message);
+        }
         CityCoreOpenRequestPacket.openFor(level, player, pos);
     }
 
     private static void deleteCity(ServerLevel level, ServerPlayer player, UUID cityId, BlockPos pos, String confirmation) {
         Optional<CityData> city = CityService.findCity(level, cityId);
         if (city.isEmpty() || !city.get().cityName().equals(confirmation)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.delete_confirm_failed"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.delete_confirm_failed"));
             CityCoreOpenRequestPacket.openFor(level, player, pos);
             return;
         }
         boolean deleted = CityService.deleteCity(level, cityId, player.getUUID(), CityChunkManager.get(level), CityPoiManager.get(level));
-        player.displayClientMessage(Component.translatable(deleted ? "message.simukraft.city_core.deleted" : "message.simukraft.city_core.delete_failed", confirmation), true);
+        Component message = Component.translatable(deleted ? "message.simukraft.city_core.deleted" : "message.simukraft.city_core.delete_failed", confirmation);
+        if (deleted) {
+            InfoToastService.success(player, message);
+        } else {
+            InfoToastService.warning(player, message);
+        }
         PacketDistributor.sendToPlayer(player, CityCoreOpenResponsePacket.from(pos, Optional.empty(), CityPermissionLevel.CITIZEN, false, false));
         if (deleted) {
             CityChunkSyncService.syncToAll(level);

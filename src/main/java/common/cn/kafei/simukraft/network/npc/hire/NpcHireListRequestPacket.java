@@ -6,6 +6,7 @@ import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.citizen.CitizenSkillSnapshot;
 import common.cn.kafei.simukraft.job.CityJobMobilityService;
 import common.cn.kafei.simukraft.job.CityJobType;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -44,7 +45,7 @@ public record NpcHireListRequestPacket(BlockPos sourcePos, String sourceType, St
     public static void handle(NpcHireListRequestPacket packet, IPayloadContext context) {
         if (context.player() instanceof ServerPlayer player && player.level() instanceof ServerLevel level) {
             if (!player.blockPosition().closerThan(packet.sourcePos(), 16.0D)) {
-                player.displayClientMessage(Component.translatable("message.simukraft.build_box.too_far"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.build_box.too_far"));
                 return;
             }
             UUID workplaceId = UUID.nameUUIDFromBytes((packet.sourceType() + ":" + packet.role() + "@" + packet.sourcePos().toShortString()).getBytes(StandardCharsets.UTF_8));

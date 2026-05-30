@@ -1,5 +1,6 @@
 package client.cn.kafei.simukraft.client.path;
 
+import client.cn.kafei.simukraft.client.toast.ClientInfoToast;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -204,7 +205,7 @@ public final class NpcPathDebugRenderer {
     private static void showActionBar(Component message) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(message, true);
+            ClientInfoToast.show(Component.translatable("toast.simukraft.title"), message, "info");
         }
     }
 

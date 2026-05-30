@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.building.PlacedBuildingRecord;
 import common.cn.kafei.simukraft.building.controlbox.ResidentialControlBoxService;
 import common.cn.kafei.simukraft.citizen.CitizenHousingService;
 import common.cn.kafei.simukraft.config.ServerConfig;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -44,23 +45,23 @@ public record ResidentialControlBoxOccupancyPacket(BlockPos pos, Action action) 
 
     private static void handleFor(ServerLevel level, ServerPlayer player, ResidentialControlBoxOccupancyPacket packet) {
         if (!player.blockPosition().closerThan(packet.pos(), 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.too_far"));
             return;
         }
         if (!level.getBlockState(packet.pos()).is(ModBlocks.RESIDENTIAL_CONTROL_BOX.get())) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.not_found"));
             return;
         }
         PlacedBuildingRecord building = ResidentialControlBoxService.findBuilding(level, packet.pos());
         if (building == null || building.cityId() == null) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.no_building"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.no_building"));
             return;
         }
         int changed = switch (packet.action()) {
             case ASSIGN_EXISTING -> CitizenHousingService.fillVacantHomes(level, building.cityId());
             case SPAWN_NEW -> CitizenHousingService.spawnCitizensForVacantHomes(level, building.cityId(), building.worldOrigin(), ServerConfig.populationGrowthMaxPerInterval());
         };
-        player.displayClientMessage(Component.translatable(packet.action().messageKey(), changed), true);
+        InfoToastService.success(player, Component.translatable(packet.action().messageKey(), changed));
         PacketDistributor.sendToPlayer(player, ResidentialControlBoxOpenResponsePacket.from(ResidentialControlBoxService.buildView(level, packet.pos())));
     }
 

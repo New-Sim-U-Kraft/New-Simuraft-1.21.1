@@ -11,6 +11,7 @@ import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
 import common.cn.kafei.simukraft.job.CityJobMobilityService;
 import common.cn.kafei.simukraft.job.CityJobType;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -55,28 +56,28 @@ public record BuildBoxStartConstructionPacket(BlockPos buildBoxPos,
             return;
         }
         if (!player.blockPosition().closerThan(packet.buildBoxPos(), 24.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.build_box.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.build_box.too_far"));
             return;
         }
         UUID citizenId = CitizenService.findAssignedCitizen(level, workplaceId(packet.buildBoxPos(), "builder"));
         if (citizenId == null) {
-            player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.not_found"));
             return;
         }
         Optional<CitizenData> citizenOptional = CitizenService.findCitizen(level, citizenId);
         if (citizenOptional.isEmpty()) {
-            player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.not_found"));
             return;
         }
         CitizenData citizen = citizenOptional.get();
         if (citizen.dead()) {
-            player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.not_found"));
             return;
         }
         BuilderConstructionService.cancelTask(level, citizen.uuid());
         Optional<BuildingStructure> structureOptional = BuildingStructureService.loadStructure(packet.category(), packet.buildingFileName());
         if (structureOptional.isEmpty()) {
-            player.displayClientMessage(Component.literal("未找到建筑结构或蓝图解析失败"), true);
+            InfoToastService.error(player, Component.translatable("message.simukraft.build_box.structure_not_found"));
             return;
         }
         BuildingStructure structure = structureOptional.get();
@@ -107,7 +108,7 @@ public record BuildBoxStartConstructionPacket(BlockPos buildBoxPos,
         citizen.setStatusLabel("建造中: " + structure.displayName());
         CitizenService.save(level, citizen.uuid());
         CityJobMobilityService.teleportCitizenToWorkplace(level, citizen.uuid(), packet.buildBoxPos(), CityJobType.BUILDER, CitizenWorkStatus.WORKING, structure.displayName());
-        player.displayClientMessage(Component.literal("已开始建造: " + structure.displayName()), false);
+        InfoToastService.success(player, Component.translatable("message.simukraft.build_box.construction_started", structure.displayName()));
     }
 
     private static UUID workplaceId(BlockPos pos, String role) {

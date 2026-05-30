@@ -29,12 +29,13 @@ import common.cn.kafei.simukraft.network.npc.state.EmploymentStateRequestPacket;
 import common.cn.kafei.simukraft.network.npc.state.EmploymentStateResponsePacket;
 import common.cn.kafei.simukraft.network.path.NpcPathDebugRequestPacket;
 import common.cn.kafei.simukraft.network.path.NpcPathDebugSyncPacket;
+import common.cn.kafei.simukraft.network.toast.InfoToastPacket;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
 public final class ModNetwork {
-    private static final String NETWORK_VERSION = "3";
+    private static final String NETWORK_VERSION = "4";
 
     private ModNetwork() {
     }
@@ -72,5 +73,6 @@ public final class ModNetwork {
         registrar.playToClient(ResidentialControlBoxViewUpdatePacket.TYPE, ResidentialControlBoxViewUpdatePacket.STREAM_CODEC, ResidentialControlBoxViewUpdatePacket::handle);
         registrar.playToClient(ResidentialControlBoxOpenResponsePacket.TYPE, ResidentialControlBoxOpenResponsePacket.STREAM_CODEC, ResidentialControlBoxOpenResponsePacket::handle);
         registrar.playToClient(NpcPathDebugSyncPacket.TYPE, NpcPathDebugSyncPacket.STREAM_CODEC, NpcPathDebugSyncPacket::handle);
+        registrar.playToClient(InfoToastPacket.TYPE, InfoToastPacket.STREAM_CODEC, InfoToastPacket::handle);
     }
 }

@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.city.CityData;
 import common.cn.kafei.simukraft.city.CityPermissionLevel;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.network.city.core.CityCoreOpenRequestPacket;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -49,12 +50,12 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
 
     private static void handleAction(ServerLevel level, ServerPlayer player, CityCoreMemberActionPacket packet) {
         if (!player.blockPosition().closerThan(packet.pos(), 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.too_far"));
             return;
         }
         Optional<CityData> city = CityService.findCityByCorePosForPlayer(level, packet.pos(), player.getUUID());
         if (city.isEmpty()) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.not_found"));
             return;
         }
         boolean success = switch (packet.action()) {
@@ -62,7 +63,12 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
             case REMOVE -> CityService.removePlayer(level, city.get().cityId(), player.getUUID(), packet.targetId());
             case SET_PERMISSION -> CityService.setPlayerPermission(level, city.get().cityId(), player.getUUID(), packet.targetId(), packet.permissionLevel());
         };
-        player.displayClientMessage(Component.translatable(success ? "message.simukraft.city_core.member_action_success" : "message.simukraft.city_core.member_action_failed"), true);
+        Component message = Component.translatable(success ? "message.simukraft.city_core.member_action_success" : "message.simukraft.city_core.member_action_failed");
+        if (success) {
+            InfoToastService.success(player, message);
+        } else {
+            InfoToastService.warning(player, message);
+        }
         CityCoreMembersRequestPacket.sendMembers(level, player, packet.pos());
         CityCoreOpenRequestPacket.openFor(level, player, packet.pos());
     }
@@ -77,7 +83,7 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
         }
         ServerPlayer target = level.getServer().getPlayerList().getPlayerByName(targetName);
         if (target == null) {
-            operator.displayClientMessage(Component.translatable("message.simukraft.city_core.player_not_online", targetName), true);
+            InfoToastService.warning(operator, Component.translatable("message.simukraft.city_core.player_not_online", targetName));
             return false;
         }
         return CityService.addPlayer(level, cityId, operator.getUUID(), target.getUUID(), target.getGameProfile().getName(), permissionLevel);

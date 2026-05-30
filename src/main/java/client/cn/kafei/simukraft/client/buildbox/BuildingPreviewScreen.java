@@ -1,6 +1,7 @@
 package client.cn.kafei.simukraft.client.buildbox;
 
 import client.cn.kafei.simukraft.client.freecamera.FreeCameraManager;
+import client.cn.kafei.simukraft.client.toast.ClientInfoToast;
 import client.cn.kafei.simukraft.client.ui.SimuKraftUiTheme;
 import common.cn.kafei.simukraft.building.BuildingStructure;
 import common.cn.kafei.simukraft.network.building.BuildBoxStartConstructionPacket;
@@ -105,7 +106,11 @@ public final class BuildingPreviewScreen extends Screen {
             case GLFW.GLFW_KEY_ENTER, GLFW.GLFW_KEY_KP_ENTER -> {
                 if (!BuildingBoundsRenderer.isEntireBuildingInCityTerritory()) {
                     if (this.minecraft != null && this.minecraft.player != null) {
-                        this.minecraft.player.displayClientMessage(Component.translatable("message.simukraft.construction.outside_city"), true);
+                        ClientInfoToast.show(
+                                Component.translatable("toast.simukraft.title"),
+                                Component.translatable("message.simukraft.construction.outside_city"),
+                                "warning"
+                        );
                     }
                     return true;
                 }

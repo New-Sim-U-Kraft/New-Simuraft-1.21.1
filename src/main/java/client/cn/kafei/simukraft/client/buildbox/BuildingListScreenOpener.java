@@ -1,5 +1,6 @@
 package client.cn.kafei.simukraft.client.buildbox;
 
+import client.cn.kafei.simukraft.client.toast.ClientInfoToast;
 import client.cn.kafei.simukraft.client.ui.SimuKraftUiTheme;
 import client.cn.kafei.simukraft.client.ui.SimuKraftFlexLayout;
 import com.lowdragmc.lowdraglib2.gui.texture.ColorRectTexture;
@@ -426,13 +427,17 @@ public final class BuildingListScreenOpener {
         Component message = loadedStructure.isPresent()
                 ? Component.translatable("message.simukraft.building_list.loaded", building.name(), loadedStructure.get().format().name() + " " + loadedStructure.get().size().toShortString())
                 : Component.translatable("message.simukraft.building_list.load_failed", building.name(), building.structureFileName());
-        minecraft.player.displayClientMessage(message, true);
+        ClientInfoToast.show(Component.translatable("toast.simukraft.title"), message, loadedStructure.isPresent() ? "success" : "warning");
         Optional<BuildingStructure> structure = BuildingStructureService.loadStructure(building);
         if (structure.isPresent()) {
             pendingPreview = new PendingPreview(building, currentBuildBoxPos, structure.get());
             minecraft.setScreen(null);
         } else {
-            minecraft.player.displayClientMessage(Component.translatable("message.simukraft.building_preview.open_failed", building.name()), false);
+            ClientInfoToast.show(
+                    Component.translatable("toast.simukraft.title"),
+                    Component.translatable("message.simukraft.building_preview.open_failed", building.name()),
+                    "error"
+            );
         }
     }
 

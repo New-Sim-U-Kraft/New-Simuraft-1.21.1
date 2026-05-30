@@ -1,6 +1,8 @@
 package client.cn.kafei.simukraft.client.city;
 
 import client.cn.kafei.simukraft.client.ui.SimuKraftUiTheme;
+import client.cn.kafei.simukraft.client.ui.SimuKraftFlexLayout;
+import client.cn.kafei.simukraft.client.ui.SimuKraftWindowFrame;
 import client.cn.kafei.simukraft.client.city.map.SimuMapManager;
 import client.cn.kafei.simukraft.client.city.map.SimuMapRegion;
 import common.cn.kafei.simukraft.city.CityPermissionLevel;
@@ -14,14 +16,11 @@ import common.cn.kafei.simukraft.network.city.member.CityCoreMemberActionPacket;
 import common.cn.kafei.simukraft.network.city.member.CityCoreMembersRequestPacket;
 import common.cn.kafei.simukraft.network.city.member.CityCoreMembersResponsePacket;
 
-import com.lowdragmc.lowdraglib2.editor.ui.Editor;
-import com.lowdragmc.lowdraglib2.editor.ui.EditorWindow;
 import com.lowdragmc.lowdraglib2.editor.ui.View;
 import com.lowdragmc.lowdraglib2.editor.ui.ViewContainer;
 import com.lowdragmc.lowdraglib2.gui.ColorPattern;
 import com.lowdragmc.lowdraglib2.gui.texture.Icons;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
-import com.lowdragmc.lowdraglib2.gui.texture.TextTexture;
 import com.lowdragmc.lowdraglib2.gui.ui.ModularUI;
 import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
@@ -50,7 +49,6 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
-import javax.annotation.Nonnull;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -99,27 +97,39 @@ public final class CityCoreScreenOpener {
     }
 
     private static ModularUI createUi(CityCoreMapResponsePacket packet) {
-        EditorWindow root = new EditorWindow(() -> new CityCoreEditor(packet));
+        CityCoreWindow window = new CityCoreWindow(packet);
+        UIElement root = createWindowRoot(window);
         return new ModularUI(SimuKraftUiTheme.createUi(root))
                 .shouldCloseOnEsc(true)
                 .shouldCloseOnKeyInventory(false);
     }
 
     private static ModularUI createUi(CityCoreMembersResponsePacket packet) {
-        EditorWindow root = new EditorWindow(() -> new CityCoreEditor(packet));
+        CityCoreWindow window = new CityCoreWindow(packet);
+        UIElement root = createWindowRoot(window);
         return new ModularUI(SimuKraftUiTheme.createUi(root))
                 .shouldCloseOnEsc(true)
                 .shouldCloseOnKeyInventory(false);
     }
 
     private static ModularUI createUi(CityCoreOpenResponsePacket packet) {
-        EditorWindow root = new EditorWindow(() -> new CityCoreEditor(packet));
+        CityCoreWindow window = new CityCoreWindow(packet);
+        UIElement root = createWindowRoot(window);
         return new ModularUI(SimuKraftUiTheme.createUi(root))
                 .shouldCloseOnEsc(true)
                 .shouldCloseOnKeyInventory(false);
     }
 
-    private static UIElement workspace(CityCoreOpenResponsePacket packet, CityCoreEditor editor) {
+    private static UIElement createWindowRoot(CityCoreWindow window) {
+        SimuKraftFlexLayout.ScreenSize screenSize = SimuKraftFlexLayout.screenSize();
+        return SimuKraftWindowFrame.create(
+                screenSize,
+                Component.translatable("screen.simukraft.city_core.title"),
+                workspace(window.packet, window),
+                CityCoreScreenOpener::close);
+    }
+
+    private static UIElement workspace(CityCoreOpenResponsePacket packet, CityCoreWindow window) {
         UIElement body = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.heightPercent(100);
@@ -128,8 +138,8 @@ public final class CityCoreScreenOpener {
             layout.gapAll(8);
             layout.alignItems(AlignItems.STRETCH);
         });
-        body.addChild(editor.sidebarContainer);
-        body.addChild(editor.rightTabs);
+        body.addChild(window.sidebarContainer);
+        body.addChild(window.rightTabs);
         return body;
     }
 
@@ -145,7 +155,7 @@ public final class CityCoreScreenOpener {
         return scroller;
     }
 
-    private static UIElement menuColumn(CityCoreOpenResponsePacket packet, CityCoreEditor editor) {
+    private static UIElement menuColumn(CityCoreOpenResponsePacket packet, CityCoreWindow window) {
         UIElement menu = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.flexDirection(FlexDirection.COLUMN);
@@ -153,17 +163,17 @@ public final class CityCoreScreenOpener {
             layout.alignItems(AlignItems.STRETCH);
         });
         if (!packet.hasCity()) {
-            menu.addChild(menuButton("screen.simukraft.city_core.create", () -> editor.openTab("create", "screen.simukraft.city_core.create", createPanel(packet))));
+            menu.addChild(menuButton("screen.simukraft.city_core.create", () -> window.openTab("create", "screen.simukraft.city_core.create", createPanel(packet))));
         } else if (packet.canManageCity()) {
-            menu.addChild(menuButton("screen.simukraft.city_core.menu.info", () -> editor.openTab("info", "screen.simukraft.city_core.menu.info", scrollable(contentPanel(packet)))));
+            menu.addChild(menuButton("screen.simukraft.city_core.menu.info", () -> window.openTab("info", "screen.simukraft.city_core.menu.info", scrollable(contentPanel(packet)))));
             menu.addChild(menuButton("screen.simukraft.city_core.map_title", () -> requestMap(packet)));
-            menu.addChild(menuButton("screen.simukraft.city_core.menu.edit", () -> editor.openTab("edit", "screen.simukraft.city_core.menu.edit", editPanel(packet))));
-            menu.addChild(menuButton("screen.simukraft.city_core.menu.upgrade", () -> editor.openTab("upgrade", "screen.simukraft.city_core.menu.upgrade", upgradePanel(packet))));
+            menu.addChild(menuButton("screen.simukraft.city_core.menu.edit", () -> window.openTab("edit", "screen.simukraft.city_core.menu.edit", editPanel(packet))));
+            menu.addChild(menuButton("screen.simukraft.city_core.menu.upgrade", () -> window.openTab("upgrade", "screen.simukraft.city_core.menu.upgrade", upgradePanel(packet))));
             menu.addChild(menuButton("screen.simukraft.city_core.menu.citizens", () -> requestMembers(packet)));
             menu.addChild(menuButton("screen.simukraft.city_core.menu.officials", () -> requestMembers(packet)));
-            menu.addChild(menuButton("screen.simukraft.city_core.menu.finance", () -> editor.openTab("finance", "screen.simukraft.city_core.menu.finance", financePanel(packet))));
+            menu.addChild(menuButton("screen.simukraft.city_core.menu.finance", () -> window.openTab("finance", "screen.simukraft.city_core.menu.finance", financePanel(packet))));
         } else {
-            menu.addChild(menuButton("screen.simukraft.city_core.menu.info", () -> editor.openTab("info", "screen.simukraft.city_core.menu.info", scrollable(contentPanel(packet)))));
+            menu.addChild(menuButton("screen.simukraft.city_core.menu.info", () -> window.openTab("info", "screen.simukraft.city_core.menu.info", scrollable(contentPanel(packet)))));
             menu.addChild(menuButton("screen.simukraft.city_core.map_title", () -> requestMap(packet)));
         }
         menu.addChild(menuSpacer());
@@ -407,12 +417,6 @@ public final class CityCoreScreenOpener {
         }
     }
 
-    private static TextTexture windowTitleTexture() {
-        return new TextTexture(Component.translatable("screen.simukraft.city_core.title").getString())
-                .setType(TextTexture.TextType.LEFT)
-                .setWidth(130);
-    }
-
     private static Label line(Component component) {
         Label label = new Label();
         label.setText(component);
@@ -512,7 +516,7 @@ public final class CityCoreScreenOpener {
         return button;
     }
 
-    private static final class CityCoreEditor extends Editor {
+    private static final class CityCoreWindow {
         private final CityCoreOpenResponsePacket packet;
         private final CityCoreMembersResponsePacket membersPacket;
         private final CityCoreMapResponsePacket mapPacket;
@@ -521,40 +525,28 @@ public final class CityCoreScreenOpener {
         private final UIElement sidebarContainer = new UIElement();
         private boolean sidebarCollapsed;
 
-        private CityCoreEditor(CityCoreOpenResponsePacket packet) {
+        private CityCoreWindow(CityCoreOpenResponsePacket packet) {
             this(packet, null, null);
         }
 
-        private CityCoreEditor(CityCoreMembersResponsePacket membersPacket) {
+        private CityCoreWindow(CityCoreMembersResponsePacket membersPacket) {
             this(new CityCoreOpenResponsePacket(membersPacket.pos(), true, membersPacket.cityId(), membersPacket.cityName(), membersPacket.funds(), membersPacket.cityLevel(), membersPacket.members().size(), 0, 0, membersPacket.viewerPermission(), false, membersPacket.canManageCity(), List.of(), List.of(), List.of()), membersPacket, null);
         }
 
-        private CityCoreEditor(CityCoreMapResponsePacket mapPacket) {
+        private CityCoreWindow(CityCoreMapResponsePacket mapPacket) {
             this(new CityCoreOpenResponsePacket(mapPacket.pos(), true, mapPacket.cityId(), mapPacket.cityName(), mapPacket.funds(), mapPacket.cityLevel(), mapPacket.memberCount(), 0, 0, mapPacket.permissionLevel(), false, mapPacket.canManageCity(), List.of(), List.of(), List.of()), null, mapPacket);
         }
 
-        private CityCoreEditor(CityCoreOpenResponsePacket packet, CityCoreMembersResponsePacket membersPacket, CityCoreMapResponsePacket mapPacket) {
+        private CityCoreWindow(CityCoreOpenResponsePacket packet, CityCoreMembersResponsePacket membersPacket, CityCoreMapResponsePacket mapPacket) {
             this.packet = packet;
             this.membersPacket = membersPacket;
             this.mapPacket = mapPacket;
-            icon.setDisplay(false);
-            menuContainer.setDisplay(false);
-            topPlaceholder.layout(layout -> {
-                layout.flex(1);
-                layout.paddingLeft(8);
-                layout.paddingTop(0);
-            }).style(style -> style.backgroundTexture(windowTitleTexture()));
-            rootWindow.setViewContainer(new ViewContainer());
-            rootWindow.getLeftTop().tabView.tabHeaderContainer.setDisplay(false);
             rightTabs.layout(layout -> {
                 layout.flex(1);
                 layout.heightPercent(100);
+                layout.widthPercent(100);
             });
             rebuildSidebar();
-
-            View workspaceView = new View("screen.simukraft.city_core.title", IGuiTexture.EMPTY);
-            workspaceView.addChild(workspace(packet, this));
-            rootWindow.getLeftTop().addView(workspaceView);
             openDefaultTabs();
         }
 
@@ -605,29 +597,6 @@ public final class CityCoreScreenOpener {
             rightTabs.selectView(view);
         }
 
-        @Override
-        protected @Nonnull Editor createNewEditorInstance() {
-            if (mapPacket != null) {
-                return new CityCoreEditor(mapPacket);
-            }
-            return membersPacket == null ? new CityCoreEditor(packet) : new CityCoreEditor(membersPacket);
-        }
-
-        @Override
-        protected void initMenus() {
-        }
-
-        @Override
-        protected void onPrepareInspectorView() {
-        }
-
-        @Override
-        protected void onPrepareHistoryView() {
-        }
-
-        @Override
-        protected void onPrepareResourceView() {
-        }
     }
 
     private static final class CityChunkMapElement extends UIElement {

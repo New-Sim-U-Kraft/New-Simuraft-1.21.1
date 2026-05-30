@@ -6,6 +6,7 @@ import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
 import common.cn.kafei.simukraft.job.CityJobMobilityService;
 import common.cn.kafei.simukraft.job.CityJobType;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -44,24 +45,24 @@ public record NpcHireAssignPacket(BlockPos sourcePos, String sourceType, String 
     public static void handle(NpcHireAssignPacket packet, IPayloadContext context) {
         if (context.player() instanceof ServerPlayer player && player.level() instanceof ServerLevel level) {
             if (!player.blockPosition().closerThan(packet.sourcePos(), 16.0D)) {
-                player.displayClientMessage(Component.translatable("message.simukraft.build_box.too_far"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.build_box.too_far"));
                 return;
             }
             Optional<CitizenData> citizenOptional = CitizenService.findCitizen(level, packet.citizenId());
             if (citizenOptional.isEmpty()) {
-                player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.not_found"));
                 return;
             }
             CitizenData citizen = citizenOptional.get();
             if (!CitizenService.isHireable(citizen)) {
-                player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.unavailable", citizen.name()), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.unavailable", citizen.name()));
                 return;
             }
             CityJobType jobType = CityJobMobilityService.resolveHireRole(packet.role());
             UUID workplaceId = UUID.nameUUIDFromBytes((packet.sourceType() + ":" + packet.role() + "@" + packet.sourcePos().toShortString()).getBytes(StandardCharsets.UTF_8));
             CitizenService.applyEmployment(level, citizen.uuid(), jobType, workplaceId, packet.sourcePos(), "");
             CityJobMobilityService.teleportCitizenToWorkplace(level, citizen.uuid(), packet.sourcePos(), jobType, CitizenWorkStatus.WORKING, "");
-            player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.success", citizen.name()), true);
+            InfoToastService.success(player, Component.translatable("message.simukraft.hire_npc.success", citizen.name()));
         }
     }
 }

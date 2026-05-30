@@ -19,6 +19,7 @@ public final class ServerConfig {
     private static final ModConfigSpec.ConfigValue<List<? extends String>> BASIC_MATERIALS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> MATERIAL_CATEGORY_GROUPS;
     private static final ModConfigSpec.ConfigValue<List<? extends String>> EXPERT_MODE_SKIP_LIST;
+    private static final ModConfigSpec.IntValue MATERIAL_WARNING_COOLDOWN_SECONDS;
     private static final ModConfigSpec.BooleanValue BUILDER_PAUSE_AT_NIGHT;
     private static final ModConfigSpec.IntValue BUILDER_REST_START_TIME;
     private static final ModConfigSpec.IntValue BUILDER_REST_END_TIME;
@@ -130,6 +131,10 @@ public final class ServerConfig {
                         () -> MaterialConfigDefaults.EXPERT_MODE_SKIP_LIST,
                         () -> "minecraft:bedrock",
                         ServerConfig::isStringEntry);
+        MATERIAL_WARNING_COOLDOWN_SECONDS = builder
+                .comment("Cooldown in seconds before repeating the same missing material popup.")
+                .translation("config.simukraft.materials.warningCooldownSeconds")
+                .defineInRange("warningCooldownSeconds", 20, 1, 300);
         builder.pop();
         builder.push("npc_pathfinding");
         PATH_MAX_LOADED_CITIZEN_ENTITIES = builder
@@ -237,6 +242,10 @@ public final class ServerConfig {
 
     public static List<String> expertModeSkipList() {
         return copyStringList(EXPERT_MODE_SKIP_LIST.get());
+    }
+
+    public static int materialWarningCooldownTicks() {
+        return MATERIAL_WARNING_COOLDOWN_SECONDS.get() * 20;
     }
 
     public static int pathMaxLoadedCitizenEntities() {

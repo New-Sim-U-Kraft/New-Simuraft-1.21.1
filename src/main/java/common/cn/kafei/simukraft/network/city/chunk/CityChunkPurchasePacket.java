@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.city.CityClaimService;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.network.city.map.CityCoreMapRequestPacket;
 import common.cn.kafei.simukraft.network.hud.HudSyncService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -38,7 +39,11 @@ public record CityChunkPurchasePacket(BlockPos pos, int chunkX, int chunkZ) impl
         }
         CityService.findCityByCorePos(level, packet.pos()).ifPresent(city -> {
             CityClaimService.ClaimResult result = CityClaimService.buyChunk(level, player, city, packet.chunkX(), packet.chunkZ());
-            player.displayClientMessage(result.message(), true);
+            if (result.success()) {
+                InfoToastService.success(player, result.message());
+            } else {
+                InfoToastService.warning(player, result.message());
+            }
             CityCoreMapRequestPacket.sendMap(level, player, packet.pos());
             if (result.success()) {
                 CityChunkSyncService.syncToAll(level);

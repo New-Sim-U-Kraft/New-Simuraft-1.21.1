@@ -1,7 +1,8 @@
 package client.cn.kafei.simukraft.client.buildbox;
 
-import client.cn.kafei.simukraft.client.freecamera.FreeCameraManager;
 import client.cn.kafei.simukraft.client.city.ClientCityChunkCache;
+import client.cn.kafei.simukraft.client.freecamera.FreeCameraManager;
+import client.cn.kafei.simukraft.client.toast.ClientInfoToast;
 import common.cn.kafei.simukraft.building.BuildingBlockData;
 import common.cn.kafei.simukraft.building.BuildingStructure;
 import common.cn.kafei.simukraft.building.BuildingStructureService;
@@ -12,9 +13,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 
-@SuppressWarnings("null")
 public final class BuildingPreviewManager {
-    // 当前预览只存在客户端；确认建造时才通过网络包交给服务端。
     private static final List<PreviewBlockData> PREVIEW_BLOCKS = new ArrayList<>();
     private static BlockPos previewOrigin = BlockPos.ZERO;
     private static int rotationDegrees;
@@ -23,6 +22,7 @@ public final class BuildingPreviewManager {
     private static String buildingName = "";
     private static PreviewMesh cachedMesh = PreviewMesh.EMPTY;
     private static long previewRevision;
+
     private BuildingPreviewManager() {
     }
 
@@ -61,7 +61,6 @@ public final class BuildingPreviewManager {
         double yawRad = Math.toRadians(yaw);
         double cosYaw = Math.cos(yawRad);
         double sinYaw = Math.sin(yawRad);
-        // 将键盘的前后左右转换为自由相机朝向下的世界坐标偏移。
         int dx = (int) Math.round(-sinYaw * forward - cosYaw * right);
         int dz = (int) Math.round(cosYaw * forward - sinYaw * right);
         movePreviewRelative(dx, 0, dz);
@@ -134,7 +133,6 @@ public final class BuildingPreviewManager {
     }
 
     private static void offsetBlocks(int dx, int dy, int dz) {
-        // 平移时复用已有方块列表，只重建 mesh；旋转才重新走结构变换。
         List<PreviewBlockData> snapshot = new ArrayList<>(PREVIEW_BLOCKS);
         PREVIEW_BLOCKS.clear();
         for (PreviewBlockData block : snapshot) {
@@ -156,7 +154,6 @@ public final class BuildingPreviewManager {
         }
         ClientCityChunkCache chunkCache = ClientCityChunkCache.getInstance();
         if (chunkCache.getCurrentCityId() == null) {
-            // 城市区块尚未同步时不拦截移动，避免预览界面刚打开就卡死。
             return true;
         }
         long chunkLong = net.minecraft.world.level.ChunkPos.asLong(origin.getX() >> 4, origin.getZ() >> 4);
@@ -164,7 +161,11 @@ public final class BuildingPreviewManager {
             return true;
         }
         if (notifyOnFailure) {
-            minecraft.player.displayClientMessage(Component.translatable("message.simukraft.construction.outside_city"), true);
+            ClientInfoToast.show(
+                    Component.translatable("toast.simukraft.title"),
+                    Component.translatable("message.simukraft.construction.outside_city"),
+                    "warning"
+            );
         }
         return false;
     }

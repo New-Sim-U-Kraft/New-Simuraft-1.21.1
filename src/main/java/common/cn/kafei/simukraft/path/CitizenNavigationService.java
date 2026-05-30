@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.citizen.CitizenTeleportService;
 import common.cn.kafei.simukraft.config.ServerConfig;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
 import common.cn.kafei.simukraft.network.path.NpcPathDebugSyncPacket;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.network.chat.Component;
@@ -148,7 +149,7 @@ public final class CitizenNavigationService {
         }
         CitizenEntity citizen = findNearestLoadedCitizen(player.serverLevel(), player.position(), ServerConfig.pathLocalRadiusBlocks());
         if (citizen == null) {
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.no_citizen"));
+            InfoToastService.warning(player, Component.translatable("message.simukraft.path_debug.no_citizen"));
             PacketDistributor.sendToPlayer(player, NpcPathDebugSyncPacket.clear());
             return false;
         }
@@ -160,7 +161,7 @@ public final class CitizenNavigationService {
             return false;
         }
         if (level != player.serverLevel()) {
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.failed", "citizen_dimension_mismatch"));
+            InfoToastService.warning(player, Component.translatable("message.simukraft.path_debug.failed", "citizen_dimension_mismatch"));
             return false;
         }
         BlockPos targetPos = BlockPos.containing(target.x, target.y, target.z);
@@ -176,7 +177,7 @@ public final class CitizenNavigationService {
 
         PathRequest request = new PathRequest(citizen.getUUID(), level.dimension().location(), citizen.blockPosition(), target, MovementIntent.RUN, level.getGameTime());
         PathSnapshot snapshot = PathSnapshotBuilder.build(level, request.startPos(), request.targetBlockPos(), ServerConfig.pathLocalRadiusBlocks());
-        player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.started", citizen.getName().getString(), formatTarget(target)));
+        InfoToastService.send(player, Component.translatable("message.simukraft.path_debug.started", citizen.getName().getString(), formatTarget(target)));
         CompletableFuture<PathResult> future = CompletableFuture.supplyAsync(() -> HybridPathfinder.find(request, snapshot), executor());
         future.whenComplete((result, throwable) -> level.getServer().execute(() -> applyDebugPath(level, player, citizen.getUUID(), result, throwable)));
         return true;
@@ -185,7 +186,7 @@ public final class CitizenNavigationService {
     public static void clearDebugPath(ServerPlayer player) {
         if (player != null) {
             PacketDistributor.sendToPlayer(player, NpcPathDebugSyncPacket.clear());
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.cleared"));
+            InfoToastService.send(player, Component.translatable("message.simukraft.path_debug.cleared"));
         }
     }
 
@@ -196,7 +197,7 @@ public final class CitizenNavigationService {
         ServerLevel level = player.serverLevel();
         LevelRuntime runtime = runtime(level);
         runtime.cooldowns.entrySet().removeIf(entry -> entry.getValue() <= level.getGameTime());
-        player.sendSystemMessage(Component.translatable(
+        InfoToastService.send(player, Component.translatable(
                 "message.simukraft.path_status.summary",
                 runtime.queuedCitizenIds.size(),
                 runtime.pending.size(),
@@ -204,7 +205,7 @@ public final class CitizenNavigationService {
                 runtime.cooldowns.size()));
         PathRuntimeIssue issue = nearestIssue(level, runtime, player.position());
         if (issue != null) {
-            player.sendSystemMessage(Component.translatable(
+            InfoToastService.warning(player, Component.translatable(
                     "message.simukraft.path_status.issue",
                     shortId(issue.citizenId()),
                     issue.status(),
@@ -212,7 +213,7 @@ public final class CitizenNavigationService {
                     issue.waypointIndex(),
                     issue.waypointCount()));
         } else {
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_status.no_issue"));
+            InfoToastService.success(player, Component.translatable("message.simukraft.path_status.no_issue"));
         }
         syncDebugPaths(level, player);
         return true;
@@ -246,7 +247,7 @@ public final class CitizenNavigationService {
             sent++;
         }
         if (sent > 0) {
-            player.displayClientMessage(Component.translatable("message.simukraft.path_debug.synced", sent, runtime.active.size()), true);
+            InfoToastService.send(player, Component.translatable("message.simukraft.path_debug.synced", sent, runtime.active.size()));
         }
     }
 
@@ -465,9 +466,9 @@ public final class CitizenNavigationService {
             }
             runtime.cooldowns.remove(result.citizenId());
             activate(level, runtime, result);
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.success", result.waypoints().size()));
+            InfoToastService.success(player, Component.translatable("message.simukraft.path_debug.success", result.waypoints().size()));
         } else {
-            player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.failed", result.reason()));
+            InfoToastService.warning(player, Component.translatable("message.simukraft.path_debug.failed", result.reason()));
         }
     }
 
@@ -476,7 +477,7 @@ public final class CitizenNavigationService {
             return;
         }
         PacketDistributor.sendToPlayer(player, NpcPathDebugSyncPacket.failure(citizenId, reason));
-        player.sendSystemMessage(Component.translatable("message.simukraft.path_debug.failed", reason));
+        InfoToastService.warning(player, Component.translatable("message.simukraft.path_debug.failed", reason));
     }
 
     private static String formatTarget(Vec3 target) {

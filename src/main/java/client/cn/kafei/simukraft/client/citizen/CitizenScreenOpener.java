@@ -1,8 +1,8 @@
 package client.cn.kafei.simukraft.client.citizen;
 
+import client.cn.kafei.simukraft.client.ui.SimuKraftFlexLayout;
 import client.cn.kafei.simukraft.client.ui.SimuKraftUiTheme;
-import com.lowdragmc.lowdraglib2.editor.ui.Editor;
-import com.lowdragmc.lowdraglib2.editor.ui.EditorWindow;
+import client.cn.kafei.simukraft.client.ui.SimuKraftWindowFrame;
 import com.lowdragmc.lowdraglib2.editor.ui.View;
 import com.lowdragmc.lowdraglib2.editor.ui.ViewContainer;
 import com.lowdragmc.lowdraglib2.gui.texture.IGuiTexture;
@@ -21,7 +21,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
-import javax.annotation.Nonnull;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,13 +39,19 @@ public final class CitizenScreenOpener {
     }
 
     private static ModularUI createUi(CitizenInfoResponsePacket packet) {
-        EditorWindow root = new EditorWindow(() -> new CitizenInfoEditor(packet));
+        SimuKraftFlexLayout.ScreenSize screenSize = SimuKraftFlexLayout.screenSize();
+        CitizenInfoWindow window = new CitizenInfoWindow(packet);
+        UIElement root = SimuKraftWindowFrame.create(
+                screenSize,
+                Component.translatable("screen.simukraft.citizen_info.title", packet.name()),
+                workspace(packet, window),
+                CitizenScreenOpener::close);
         return new ModularUI(SimuKraftUiTheme.createUi(root))
                 .shouldCloseOnEsc(true)
                 .shouldCloseOnKeyInventory(false);
     }
 
-    private static UIElement workspace(CitizenInfoResponsePacket packet, CitizenInfoEditor editor) {
+    private static UIElement workspace(CitizenInfoResponsePacket packet, CitizenInfoWindow window) {
         UIElement body = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.heightPercent(100);
@@ -54,7 +59,7 @@ public final class CitizenScreenOpener {
             layout.flexDirection(FlexDirection.ROW);
             layout.alignItems(AlignItems.STRETCH);
         });
-        body.addChild(editor.rightTabs);
+        body.addChild(window.rightTabs);
         return body;
     }
 
@@ -132,12 +137,6 @@ public final class CitizenScreenOpener {
         return wrapper;
     }
 
-    private static TextTexture windowTitleTexture(CitizenInfoResponsePacket packet) {
-        return new TextTexture(Component.translatable("screen.simukraft.citizen_info.title", packet.name()).getString())
-                .setType(TextTexture.TextType.LEFT)
-                .setWidth(150);
-    }
-
     private static String genderKey(String gender) {
         return "female".equalsIgnoreCase(gender) ? "female" : "male";
     }
@@ -181,30 +180,25 @@ public final class CitizenScreenOpener {
         return String.format(Locale.ROOT, "%.1f/20.0 %s", hunger, Component.translatable(key).getString());
     }
 
-    private static final class CitizenInfoEditor extends Editor {
+    private static void close() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft != null) {
+            minecraft.setScreen(null);
+        }
+    }
+
+    private static final class CitizenInfoWindow {
         private final CitizenInfoResponsePacket packet;
         private final ViewContainer rightTabs = new ViewContainer();
         private final Map<String, View> openedTabs = new ConcurrentHashMap<>();
 
-        private CitizenInfoEditor(CitizenInfoResponsePacket packet) {
+        private CitizenInfoWindow(CitizenInfoResponsePacket packet) {
             this.packet = packet;
-            icon.setDisplay(false);
-            menuContainer.setDisplay(false);
-            topPlaceholder.layout(layout -> {
-                layout.flex(1);
-                layout.paddingLeft(8);
-                layout.paddingTop(0);
-            }).style(style -> style.backgroundTexture(windowTitleTexture(packet)));
-            rootWindow.setViewContainer(new ViewContainer());
-            rootWindow.getLeftTop().tabView.tabHeaderContainer.setDisplay(false);
             rightTabs.layout(layout -> {
                 layout.flex(1);
                 layout.heightPercent(100);
                 layout.widthPercent(100);
             });
-            View workspaceView = new View("screen.simukraft.citizen_info.title", IGuiTexture.EMPTY);
-            workspaceView.addChild(workspace(packet, this));
-            rootWindow.getLeftTop().addView(workspaceView);
             openDefaultTabs();
         }
 
@@ -228,27 +222,6 @@ public final class CitizenScreenOpener {
             view.addChild(content);
             openedTabs.put(id, view);
             rightTabs.addView(view);
-        }
-
-        @Override
-        protected @Nonnull Editor createNewEditorInstance() {
-            return new CitizenInfoEditor(packet);
-        }
-
-        @Override
-        protected void initMenus() {
-        }
-
-        @Override
-        protected void onPrepareInspectorView() {
-        }
-
-        @Override
-        protected void onPrepareHistoryView() {
-        }
-
-        @Override
-        protected void onPrepareResourceView() {
         }
     }
 

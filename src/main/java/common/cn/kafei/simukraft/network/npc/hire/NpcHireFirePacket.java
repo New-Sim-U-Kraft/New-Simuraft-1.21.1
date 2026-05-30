@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.building.BuilderConstructionService;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.job.CityJobMobilityService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -42,21 +43,21 @@ public record NpcHireFirePacket(BlockPos sourcePos, String sourceType, String ro
     public static void handle(NpcHireFirePacket packet, IPayloadContext context) {
         if (context.player() instanceof ServerPlayer player && player.level() instanceof ServerLevel level) {
             if (!player.blockPosition().closerThan(packet.sourcePos(), 16.0D)) {
-                player.displayClientMessage(Component.translatable("message.simukraft.build_box.too_far"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.build_box.too_far"));
                 return;
             }
             Optional<CitizenData> citizenOptional = CitizenService.findCitizen(level, packet.citizenId());
             if (citizenOptional.isEmpty()) {
-                player.displayClientMessage(Component.translatable("message.simukraft.hire_npc.not_found"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.hire_npc.not_found"));
                 return;
             }
             CitizenData citizen = citizenOptional.get();
             if (citizen.dead()) {
-                player.displayClientMessage(Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()));
                 return;
             }
             if (citizen.child()) {
-                player.displayClientMessage(Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.fire_npc.unavailable", citizen.name()));
                 return;
             }
             if ("build_box".equalsIgnoreCase(packet.sourceType()) && "builder".equalsIgnoreCase(packet.role())) {
@@ -64,7 +65,7 @@ public record NpcHireFirePacket(BlockPos sourcePos, String sourceType, String ro
             }
             CitizenService.clearEmployment(level, citizen.uuid());
             CityJobMobilityService.resetCitizenAfterFire(level, citizen.uuid());
-            player.displayClientMessage(Component.translatable("message.simukraft.fire_npc.success", citizen.name()), true);
+            InfoToastService.success(player, Component.translatable("message.simukraft.fire_npc.success", citizen.name()));
         }
     }
 }

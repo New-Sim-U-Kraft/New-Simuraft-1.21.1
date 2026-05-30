@@ -4,6 +4,7 @@ import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.building.PlacedBuildingDemolitionService;
 import common.cn.kafei.simukraft.building.PlacedBuildingRecord;
 import common.cn.kafei.simukraft.building.controlbox.ResidentialControlBoxService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -42,20 +43,20 @@ public record ResidentialControlBoxDemolishPacket(BlockPos pos) implements Custo
 
     private static void handleFor(ServerLevel level, ServerPlayer player, BlockPos pos) {
         if (!player.blockPosition().closerThan(pos, 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.too_far"));
             return;
         }
         if (!level.getBlockState(pos).is(ModBlocks.RESIDENTIAL_CONTROL_BOX.get())) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.not_found"));
             return;
         }
         PlacedBuildingRecord building = ResidentialControlBoxService.findBuilding(level, pos);
         if (building == null) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.no_building"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.no_building"));
             return;
         }
         if (PlacedBuildingDemolitionService.demolish(level, building)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.demolished"), true);
+            InfoToastService.success(player, Component.translatable("message.simukraft.residential_control_box.demolished"));
             PacketDistributor.sendToPlayer(player, ResidentialControlBoxOpenResponsePacket.empty(pos));
         }
     }

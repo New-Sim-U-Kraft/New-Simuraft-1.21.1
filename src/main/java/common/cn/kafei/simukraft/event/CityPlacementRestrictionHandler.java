@@ -6,11 +6,13 @@ import common.cn.kafei.simukraft.city.CityManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiService;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
 import common.cn.kafei.simukraft.building.ResidentialBedPoiService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
@@ -197,6 +199,8 @@ public final class CityPlacementRestrictionHandler {
     }
 
     private static void sendDeniedMessage(Player player) {
-        player.displayClientMessage(Component.translatable("message.simukraft.city_placement.outside_city"), true);
+        if (player instanceof ServerPlayer serverPlayer) {
+            InfoToastService.warning(serverPlayer, Component.translatable("message.simukraft.city_placement.outside_city"));
+        }
     }
 }

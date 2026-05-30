@@ -4,11 +4,12 @@ import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenManager;
 import common.cn.kafei.simukraft.citizen.CitizenService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -55,7 +56,7 @@ public record EmploymentStateResponsePacket(BlockPos sourcePos, String sourceTyp
     public static void handleRequest(EmploymentStateRequestPacket packet, IPayloadContext context) {
         if (context.player() instanceof ServerPlayer player && player.level() instanceof ServerLevel level) {
             if (!player.blockPosition().closerThan(packet.sourcePos(), 16.0D)) {
-                player.displayClientMessage(Component.translatable("message.simukraft.build_box.too_far"), true);
+                InfoToastService.warning(player, Component.translatable("message.simukraft.build_box.too_far"));
                 return;
             }
             CitizenManager manager = CitizenManager.get(level);
@@ -87,7 +88,6 @@ public record EmploymentStateResponsePacket(BlockPos sourcePos, String sourceTyp
                 .findFirst();
     }
 
-    // backfillWorkplacePos：打开工作方块界面时修复旧存档缺失的岗位坐标。
     private static void backfillWorkplacePos(ServerLevel level, CitizenData citizen, BlockPos workplacePos) {
         if (citizen == null || workplacePos == null || workplacePos.equals(citizen.workplacePos())) {
             return;

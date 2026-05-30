@@ -13,6 +13,7 @@ import common.cn.kafei.simukraft.city.poi.CityPoiData;
 import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
 import common.cn.kafei.simukraft.network.hud.HudSyncService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModSoundEvents;
 import common.cn.kafei.simukraft.util.SaveScopedCacheKey;
 import net.minecraft.network.chat.Component;
@@ -169,7 +170,7 @@ public final class ResidentialRentService {
             ServerPlayer player = level.getServer().getPlayerList().getPlayer(notice.playerId());
             if (player != null && player.serverLevel() == level) {
                 level.playSound(null, player.blockPosition(), ModSoundEvents.MONEY_COLLECT.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
-                player.sendSystemMessage(incomeSummary(notice.rentAmount(), notice.taxAmount()));
+                InfoToastService.money(player, incomeSummary(notice.rentAmount(), notice.taxAmount()));
                 HudSyncService.syncToPlayer(player, true);
             }
             return true;

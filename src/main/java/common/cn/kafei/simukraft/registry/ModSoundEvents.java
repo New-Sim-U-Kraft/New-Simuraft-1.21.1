@@ -20,6 +20,7 @@ public final class ModSoundEvents {
     public static final DeferredHolder<SoundEvent, SoundEvent> FARMLAND_BOX_BREAK = registerSound("block.farmland_box.break");
     public static final DeferredHolder<SoundEvent, SoundEvent> PLAYER_WAKE_UP = registerSound("player.wake_up");
     public static final DeferredHolder<SoundEvent, SoundEvent> MONEY_COLLECT = registerSound("money.collect");
+    public static final DeferredHolder<SoundEvent, SoundEvent> CONSTRUCTION_COMPLETE = registerSound("construction.complete");
 
     private ModSoundEvents() {
     }

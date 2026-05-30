@@ -2,6 +2,7 @@ package common.cn.kafei.simukraft.network.building.controlbox;
 
 import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.building.controlbox.ResidentialControlBoxService;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -40,11 +41,11 @@ public record ResidentialControlBoxOpenRequestPacket(BlockPos pos) implements Cu
 
     public static void openFor(ServerLevel level, ServerPlayer player, BlockPos pos) {
         if (!player.blockPosition().closerThan(pos, 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.too_far"));
             return;
         }
         if (!level.getBlockState(pos).is(ModBlocks.RESIDENTIAL_CONTROL_BOX.get())) {
-            player.displayClientMessage(Component.translatable("message.simukraft.residential_control_box.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.residential_control_box.not_found"));
             return;
         }
         PacketDistributor.sendToPlayer(player, ResidentialControlBoxOpenResponsePacket.from(ResidentialControlBoxService.buildView(level, pos)));

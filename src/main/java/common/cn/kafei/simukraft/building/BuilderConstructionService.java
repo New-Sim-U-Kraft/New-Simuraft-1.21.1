@@ -16,6 +16,7 @@ import common.cn.kafei.simukraft.job.CityJobAssignmentService;
 import common.cn.kafei.simukraft.job.CityJobMobilityService;
 import common.cn.kafei.simukraft.job.CityJobType;
 import common.cn.kafei.simukraft.material.WorkMaterialCache;
+import common.cn.kafei.simukraft.material.WorkMaterialNotificationService;
 import common.cn.kafei.simukraft.material.WorkMaterialResult;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import common.cn.kafei.simukraft.storage.SimuSqliteStorage;
@@ -278,6 +279,7 @@ public final class BuilderConstructionService {
         PlacedBuildingRecord placedBuilding = new PlacedBuildingRecord(UUID.randomUUID(), cityId, task.dimensionId(), task.category(), task.buildingFileName(), task.displayName(), task.amount(), task.structureFileName(), BuildingTransform.directionFromRotation(task.rotationDegrees()).getSerializedName(), task.origin(), BlockPos.ZERO, minPos, maxPos, System.currentTimeMillis(), cached.blocks(), task.poiDefinitions(), poiInstances);
         PlacedBuildingService.register(level, placedBuilding);
         ResidentialBedPoiService.addRecordedBeds(level, placedBuilding);
+        ConstructionCompletionNotificationService.notifyCompleted(level, citizen, task);
         flushPendingBuilderXp(level, citizen, taskRuntime);
         runtime.tasksByCitizen.remove(citizen.uuid(), taskRuntime);
         SimuSqliteStorage.deleteBuildingTask(level, citizen.uuid());
@@ -638,6 +640,7 @@ public final class BuilderConstructionService {
         taskRuntime.missingMaterialName = BuilderMaterialService.describe(materialResult.requested());
         taskRuntime.nextMaterialRetryTick = level.getGameTime() + MATERIAL_RETRY_INTERVAL_TICKS;
         syncCitizenTaskState(level, citizen, taskRuntime, waitingTask, null);
+        WorkMaterialNotificationService.notifyMissing(level, task.cityId(), task.taskId(), task.displayName(), citizen.name(), materialResult);
         persistTaskAsync(level, taskRuntime, waitingTask);
     }
 

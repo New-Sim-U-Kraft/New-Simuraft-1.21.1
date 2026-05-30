@@ -3,6 +3,7 @@ package common.cn.kafei.simukraft.block;
 import common.cn.kafei.simukraft.city.CityData;
 import common.cn.kafei.simukraft.city.CityManager;
 import common.cn.kafei.simukraft.network.city.core.CityCoreOpenRequestPacket;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import common.cn.kafei.simukraft.registry.ModBlocks;
 import common.cn.kafei.simukraft.registry.ModSoundEvents;
 import net.minecraft.core.BlockPos;
@@ -58,7 +59,9 @@ public final class CityCoreBlock extends Block {
         level.playSound(null, pos, SoundEvents.METAL_PLACE, SoundSource.BLOCKS, 1.0F, 1.0F);
         level.players().forEach(player -> {
             if (player.distanceToSqr(pos.getX() + 0.5D, pos.getY() + 0.5D, pos.getZ() + 0.5D) < 100.0D) {
-                player.displayClientMessage(Component.translatable("message.simukraft.city_core.protected"), true);
+                if (player instanceof ServerPlayer serverPlayer) {
+                    InfoToastService.warning(serverPlayer, Component.translatable("message.simukraft.city_core.protected"));
+                }
             }
         });
     }

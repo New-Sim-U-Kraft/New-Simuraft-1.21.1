@@ -2,6 +2,7 @@ package common.cn.kafei.simukraft.network.city.map;
 
 import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.network.city.CityNetworkViewFactory;
+import common.cn.kafei.simukraft.network.toast.InfoToastService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -39,14 +40,14 @@ public record CityCoreMapRequestPacket(BlockPos pos) implements CustomPacketPayl
 
     public static void sendMap(ServerLevel level, ServerPlayer player, BlockPos pos) {
         if (!player.blockPosition().closerThan(pos, 8.0D)) {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.too_far"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.too_far"));
             return;
         }
         CityCoreMapResponsePacket response = CityNetworkViewFactory.buildMapResponse(level, pos, player.getUUID());
         if (response != null) {
             PacketDistributor.sendToPlayer(player, response);
         } else {
-            player.displayClientMessage(Component.translatable("message.simukraft.city_core.not_found"), true);
+            InfoToastService.warning(player, Component.translatable("message.simukraft.city_core.not_found"));
         }
     }
 }

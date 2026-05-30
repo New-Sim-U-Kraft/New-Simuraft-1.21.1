@@ -17,7 +17,7 @@ public final class NpcWorkMaterialService {
         if (materialCache.tryConsumeOne(level, request) == WorkMaterialCache.ConsumeResult.CONSUMED) {
             return WorkMaterialResult.available(request.displayStack());
         }
-        return WorkMaterialResult.missing(request.displayStack());
+        return WorkMaterialResult.missing(request.displayStack(), request.acceptedItems());
     }
 
     public static void markMissing(ServerLevel level, CitizenData citizen, String workContext, WorkMaterialResult result) {
