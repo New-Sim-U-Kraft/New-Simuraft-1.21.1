@@ -6,6 +6,7 @@ import client.cn.kafei.simukraft.client.toast.ClientInfoToast;
 import common.cn.kafei.simukraft.building.BuildingBlockData;
 import common.cn.kafei.simukraft.building.BuildingStructure;
 import common.cn.kafei.simukraft.building.BuildingStructureService;
+import common.cn.kafei.simukraft.building.BuildingTerritoryValidator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -28,7 +29,7 @@ public final class BuildingPreviewManager {
 
     public static void startPreview(BuildingStructure structure, BlockPos origin) {
         clearPreview();
-        if (structure == null || origin == null || !isOriginAllowed(origin, false)) {
+        if (structure == null || origin == null || !isPlacementAllowed(structure, origin, 0, false)) {
             return;
         }
         previewOrigin = origin;
@@ -45,11 +46,10 @@ public final class BuildingPreviewManager {
         if (!active) {
             return;
         }
-        BlockPos nextOrigin = previewOrigin.offset(dx, dy, dz);
-        if (!isOriginAllowed(nextOrigin, true)) {
+        if (!isMovedPlacementAllowed(dx, dy, dz, true)) {
             return;
         }
-        previewOrigin = nextOrigin;
+        previewOrigin = previewOrigin.offset(dx, dy, dz);
         offsetBlocks(dx, dy, dz);
     }
 
@@ -74,7 +74,11 @@ public final class BuildingPreviewManager {
         if (!active || structure == null) {
             return;
         }
-        rotationDegrees = Math.floorMod(rotationDegrees + 90, 360);
+        int nextRotation = Math.floorMod(rotationDegrees + 90, 360);
+        if (!isPlacementAllowed(structure, previewOrigin, nextRotation, true)) {
+            return;
+        }
+        rotationDegrees = nextRotation;
         rebuildBlocks(structure);
     }
 
@@ -147,7 +151,7 @@ public final class BuildingPreviewManager {
         cachedMesh = PreviewMeshBuilder.build(PREVIEW_BLOCKS);
     }
 
-    private static boolean isOriginAllowed(BlockPos origin, boolean notifyOnFailure) {
+    private static boolean isPlacementAllowed(BuildingStructure structure, BlockPos origin, int rotation, boolean notifyOnFailure) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) {
             return true;
@@ -156,10 +160,36 @@ public final class BuildingPreviewManager {
         if (chunkCache.getCurrentCityId() == null) {
             return true;
         }
-        long chunkLong = net.minecraft.world.level.ChunkPos.asLong(origin.getX() >> 4, origin.getZ() >> 4);
-        if (chunkCache.isChunkInCurrentCity(chunkLong)) {
+        List<BlockPos> positions = BuildingStructureService.resolvePlacedBlocks(structure, origin, rotation).stream()
+                .map(BuildingBlockData::relativePos)
+                .toList();
+        if (BuildingTerritoryValidator.positionBoundsInChunks(positions, chunkCache.getCurrentCityChunks())) {
             return true;
         }
+        notifyOutsideCity(notifyOnFailure);
+        return false;
+    }
+
+    private static boolean isMovedPlacementAllowed(int dx, int dy, int dz, boolean notifyOnFailure) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return true;
+        }
+        ClientCityChunkCache chunkCache = ClientCityChunkCache.getInstance();
+        if (chunkCache.getCurrentCityId() == null) {
+            return true;
+        }
+        List<BlockPos> positions = PREVIEW_BLOCKS.stream()
+                .map(block -> block.pos().offset(dx, dy, dz))
+                .toList();
+        if (BuildingTerritoryValidator.positionBoundsInChunks(positions, chunkCache.getCurrentCityChunks())) {
+            return true;
+        }
+        notifyOutsideCity(notifyOnFailure);
+        return false;
+    }
+
+    private static void notifyOutsideCity(boolean notifyOnFailure) {
         if (notifyOnFailure) {
             ClientInfoToast.show(
                     Component.translatable("toast.simukraft.title"),
@@ -167,6 +197,5 @@ public final class BuildingPreviewManager {
                     "warning"
             );
         }
-        return false;
     }
 }

@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import client.cn.kafei.simukraft.client.city.ClientCityChunkCache;
+import common.cn.kafei.simukraft.building.BuildingTerritoryValidator;
 import common.cn.kafei.simukraft.building.PlacedBuildingRecord;
 import common.cn.kafei.simukraft.building.PlacedBuildingService;
 import net.minecraft.client.Minecraft;
@@ -141,13 +142,10 @@ public final class BuildingBoundsRenderer {
         if (cityChunks.isEmpty()) {
             return false;
         }
-        for (PreviewBlockData block : BuildingPreviewManager.getPreviewBlocks()) {
-            long chunk = net.minecraft.world.level.ChunkPos.asLong(block.pos().getX() >> 4, block.pos().getZ() >> 4);
-            if (!cityChunks.contains(chunk)) {
-                return false;
-            }
-        }
-        return true;
+        return BuildingTerritoryValidator.positionBoundsInChunks(
+                BuildingPreviewManager.getPreviewBlocks().stream().map(PreviewBlockData::pos).toList(),
+                cityChunks
+        );
     }
 
     private static void renderCityBoundary(PoseStack poseStack, Vec3 cameraPos, Minecraft minecraft) {

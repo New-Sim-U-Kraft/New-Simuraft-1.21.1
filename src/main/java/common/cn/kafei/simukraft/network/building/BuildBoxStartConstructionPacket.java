@@ -1,10 +1,12 @@
 package common.cn.kafei.simukraft.network.building;
 
 import common.cn.kafei.simukraft.SimuKraft;
+import common.cn.kafei.simukraft.building.BuildingBlockData;
 import common.cn.kafei.simukraft.building.BuildingStructure;
 import common.cn.kafei.simukraft.building.BuildingTaskStatus;
 import common.cn.kafei.simukraft.building.BuilderConstructionService;
 import common.cn.kafei.simukraft.building.BuildingStructureService;
+import common.cn.kafei.simukraft.building.BuildingTerritoryValidator;
 import common.cn.kafei.simukraft.building.BuildingTaskData;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenService;
@@ -27,6 +29,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -86,6 +89,11 @@ public record BuildBoxStartConstructionPacket(BlockPos buildBoxPos,
         }
         BuildingStructure structure = structureOptional.get();
         UUID cityId = citizen.cityId();
+        List<BuildingBlockData> placedBlocks = BuildingStructureService.resolvePlacedBlocks(structure, packet.origin(), packet.rotationDegrees());
+        if (!BuildingTerritoryValidator.blockBoundsInCity(level, cityId, placedBlocks)) {
+            InfoToastService.warning(player, Component.translatable("message.simukraft.construction.outside_city"));
+            return;
+        }
         double constructionCost = EconomyService.parseAmount(structure.amount(), "construction");
         if (constructionCost > 0.0D) {
             if (!EconomyService.canAfford(level, cityId, constructionCost) || !CityService.withdrawFunds(level, cityId, constructionCost)) {

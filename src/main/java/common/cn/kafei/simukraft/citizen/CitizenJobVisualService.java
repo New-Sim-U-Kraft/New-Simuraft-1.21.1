@@ -86,7 +86,7 @@ public final class CitizenJobVisualService {
         UUID uuid = entity.getUUID();
         int phase = Math.floorMod(uuid.hashCode(), SWING_INTERVAL_TICKS);
         if (level.getGameTime() % SWING_INTERVAL_TICKS == phase) {
-            entity.swing(InteractionHand.MAIN_HAND, true);
+            entity.triggerWorkSwing(InteractionHand.MAIN_HAND);
         }
     }
 
