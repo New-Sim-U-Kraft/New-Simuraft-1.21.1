@@ -1,5 +1,6 @@
 package client.cn.kafei.simukraft.client.city;
 
+import client.cn.kafei.simukraft.client.city.map.SimuChunkScanner;
 import client.cn.kafei.simukraft.client.city.map.SimuMapStorage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
@@ -16,6 +17,7 @@ import net.minecraft.world.level.block.GrassBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.TallGrassBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.material.MapColor;
 
 import java.util.Map;
@@ -106,7 +108,8 @@ public final class ClientCityMapTerrainCache {
     private boolean scanChunkInternal(int chunkX, int chunkZ) {
         Minecraft minecraft = Minecraft.getInstance();
         Level level = minecraft.level;
-        if (level == null || !level.hasChunk(chunkX, chunkZ)) {
+        ChunkAccess chunk = level == null ? null : SimuChunkScanner.getLoadedChunk(level, chunkX, chunkZ);
+        if (chunk == null) {
             return false;
         }
         int baseX = chunkX << 4;
@@ -161,12 +164,13 @@ public final class ClientCityMapTerrainCache {
         }
         int chunkX = SectionCoordinate.blockToSectionCoord(worldX);
         int chunkZ = SectionCoordinate.blockToSectionCoord(worldZ);
-        if (!level.hasChunk(chunkX, chunkZ)) {
+        ChunkAccess chunk = SimuChunkScanner.getLoadedChunk(level, chunkX, chunkZ);
+        if (chunk == null) {
             return null;
         }
         int localX = worldX & 15;
         int localZ = worldZ & 15;
-        int topY = level.getChunk(chunkX, chunkZ).getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, localX, localZ);
+        int topY = chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, localX, localZ);
         int minY = level.getMinBuildHeight();
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(worldX, topY, worldZ);
         BlockState state = level.getBlockState(pos);

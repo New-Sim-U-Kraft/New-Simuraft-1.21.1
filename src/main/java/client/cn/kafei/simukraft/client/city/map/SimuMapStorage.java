@@ -21,30 +21,17 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * 鍦板浘鏁版嵁鎸佷箙鍖栧瓨鍌ㄧ鐞嗗櫒銆?
- *
- * <p>瀛樺偍鐩綍缁撴瀯锛堜綅浜?.minecraft/simukraft_mapdata/锛夛細
+ * 地图数据持久化管理器。
+ * 
+ * <p>存储目录结构：</p>
  * <pre>
  * simukraft_mapdata/
- *   &lt;瀛樻。鏍囪瘑&gt;/
- *     &lt;缁村害鍛藉悕绌洪棿&gt;_&lt;缁村害璺緞&gt;/
+ *   &lt;存档标识&gt;/
+ *     &lt;维度命名空间&gt;_&lt;维度路径&gt;/
  *       &lt;regionX&gt;_&lt;regionZ&gt;.smr
  * </pre>
- *
- * <p>鏂囦欢鏍煎紡锛?smr = Simukraft Map Region锛夛細
- * <ul>
- *   <li>4 瀛楄妭 magic锛歿@code 0x534D5200}锛?SMR\0"锛?/li>
- *   <li>2 瀛楄妭 version锛歿@code 1}</li>
- *   <li>512*512 涓?short锛歨eight 鏁扮粍</li>
- *   <li>512*512 涓?int锛歝olor 鏁扮粍</li>
- *   <li>512*512 涓?short锛歠lags 鏁扮粍</li>
- * </ul>
- *
- * <p>瀛樻。鏍囪瘑瑙勫垯锛?
- * <ul>
- *   <li>鍗曚汉娓告垙锛氫娇鐢ㄥ瓨妗ｆ枃浠跺す鍚嶇О</li>
- *   <li>澶氫汉娓告垙锛氫娇鐢?{@code mp_<IP>_<port>}锛岀壒娈婂瓧绗︽浛鎹负涓嬪垝绾?/li>
- * </ul>
+ * 
+ * <p>.smr 文件按 magic、version、height、color、flags 顺序写入。</p>
  */
 public class SimuMapStorage {
 
@@ -53,7 +40,7 @@ public class SimuMapStorage {
     private static final int MAGIC = 0x534D5200;
     private static final short VERSION = 1;
 
-    /** 鏍瑰瓨鍌ㄧ洰褰曪紝浣嶄簬 MC 娓告垙鐩綍涓?*/
+    /** 根存储目录，位于 MC 游戏目录下。 */
     private static final String ROOT_DIR = "simukraft_mapdata";
 
     private static final ExecutorService SAVE_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
@@ -72,9 +59,9 @@ public class SimuMapStorage {
     }
 
     /**
-     * 鑾峰彇褰撳墠瀛樻。鐨勬爣璇嗗瓧绗︿覆銆?
-     *
-     * @return 鍗曚汉娓告垙杩斿洖瀛樻。鏂囦欢澶瑰悕锛屽浜烘父鎴忚繑鍥?{@code mp_<host>_<port>}锛屾棤娉曡瘑鍒椂杩斿洖 {@code unknown}
+     * 获取当前存档的地图缓存标识。
+     * 
+     * @return 单人返回存档名，多人返回服务器地址标识，无法识别时返回 unknown
      */
     public static String getCurrentWorldId() {
         Minecraft mc = Minecraft.getInstance();
@@ -93,10 +80,10 @@ public class SimuMapStorage {
     }
 
     /**
-     * 灏嗙淮搴?key 杞崲涓哄悎娉曠殑鐩綍鍚嶇О銆?
-     *
-     * @param dimension 缁村害璧勬簮閿?
-     * @return 褰㈠ {@code minecraft_overworld} 鐨勫瓧绗︿覆
+     * 将维度 key 转换为合法目录名。
+     * 
+     * @param dimension 维度资源键
+     * @return 形如 minecraft_overworld 的目录名
      */
     public static String dimensionToDir(ResourceKey<Level> dimension) {
         String ns = dimension.location().getNamespace();
@@ -105,11 +92,11 @@ public class SimuMapStorage {
     }
 
     /**
-     * 鑾峰彇鎸囧畾瀛樻。鍜岀淮搴︾殑鍖哄煙鏂囦欢鎵€鍦ㄧ洰褰曡矾寰勩€?
-     *
-     * @param worldId   瀛樻。鏍囪瘑
-     * @param dimension 缁村害璧勬簮閿?
-     * @return 鐩綍璺緞
+     * 获取指定存档和维度的 region 文件目录。
+     * 
+     * @param worldId 存档标识
+     * @param dimension 维度资源键
+     * @return region 目录路径
      */
     public static Path getRegionDir(String worldId, ResourceKey<Level> dimension) {
         Path gameDir = Minecraft.getInstance().gameDirectory.toPath();
@@ -117,25 +104,25 @@ public class SimuMapStorage {
     }
 
     /**
-     * 鑾峰彇鍗曚釜鍖哄煙鏂囦欢鐨勮矾寰勩€?
-     *
-     * @param worldId   瀛樻。鏍囪瘑
-     * @param dimension 缁村害璧勬簮閿?
-     * @param regionX   鍖哄煙X鍧愭爣
-     * @param regionZ   鍖哄煙Z鍧愭爣
-     * @return 鏂囦欢璺緞
+     * 获取单个 region 文件路径。
+     * 
+     * @param worldId 存档标识
+     * @param dimension 维度资源键
+     * @param regionX region X 坐标
+     * @param regionZ region Z 坐标
+     * @return region 文件路径
      */
     public static Path getRegionFile(String worldId, ResourceKey<Level> dimension, int regionX, int regionZ) {
         return getRegionDir(worldId, dimension).resolve(regionX + "_" + regionZ + ".smr");
     }
 
     /**
-     * 灏嗗崟涓尯鍩熺殑鏁版嵁鍐欏叆纾佺洏銆?
-     * 浠呭湪鏈夊疄闄呮暟鎹椂鍐欏叆锛涜嫢鍖哄煙鏁版嵁涓虹┖鍒欒烦杩囥€?
-     *
-     * @param worldId   瀛樻。鏍囪瘑
-     * @param dimension 缁村害璧勬簮閿?
-     * @param region    寰呬繚瀛樼殑鍖哄煙
+     * 保存单个 region 数据到磁盘。
+     * 空数据不会写入。
+     * 
+     * @param worldId 存档标识
+     * @param dimension 维度资源键
+     * @param region 待保存的 region
      */
     public static void saveRegion(String worldId, ResourceKey<Level> dimension, SimuMapRegion region) {
         SimuMapRegionData data = region.getData();
@@ -165,11 +152,11 @@ public class SimuMapStorage {
     }
 
     /**
-     * 灏嗕竴鎵瑰尯鍩熺殑鏁版嵁鎵归噺鍐欏叆纾佺洏銆?
-     *
-     * @param worldId   瀛樻。鏍囪瘑
-     * @param dimension 缁村害璧勬簮閿?
-     * @param regions   寰呬繚瀛樼殑鍖哄煙闆嗗悎
+     * 批量保存 region 数据到磁盘。
+     * 
+     * @param worldId 存档标识
+     * @param dimension 维度资源键
+     * @param regions 待保存的 region 集合
      */
     public static void saveAll(String worldId, ResourceKey<Level> dimension,
                                Collection<SimuMapRegion> regions) {
@@ -180,10 +167,7 @@ public class SimuMapStorage {
                 regions.size(), worldId, dimensionToDir(dimension));
     }
 
-    /**
-     * 寮傛淇濆瓨涓€鎵瑰尯鍩燂紝閬垮厤鍦ㄥ鎴风鐧诲綍/閫€鍑洪樁娈甸樆濉炰富绾跨▼銆?
-     * 杩欓噷鐩存帴淇濈暀鍖哄煙鏁版嵁寮曠敤锛屼富绾跨▼鍙噴鏀剧汗鐞嗚祫婧愶紝纾佺洏鍐欏叆瀹屾垚鍚庡啀娓呯悊鏁版嵁瀵硅薄銆?
-     */
+    /** 异步保存 region 数据，避免阻塞客户端主线程。 */
     public static void saveAllAsync(String worldId, ResourceKey<Level> dimension,
                                     Collection<SimuMapRegion> regions, String reason) {
         List<SimuMapRegion> regionSnapshot = new ArrayList<>(regions);
@@ -203,12 +187,12 @@ public class SimuMapStorage {
     }
 
     /**
-     * 浠庣鐩樺姞杞芥寚瀹氬瓨妗ｅ拰缁村害涓嬬殑鎵€鏈夊凡瀛樺尯鍩熸暟鎹紝濉厖鍒颁紶鍏ョ殑 regions Map 涓€?
-     * 浠呭姞杞芥枃浠跺瓨鍦ㄤ笖鏍煎紡鍚堟硶鐨勫尯鍩燂紱鏍煎紡閿欒鐨勬枃浠朵細琚烦杩囧苟璁板綍璀﹀憡銆?
-     *
-     * @param worldId   瀛樻。鏍囪瘑
-     * @param dimension 缁村害璧勬簮閿?
-     * @param regions   鐩爣 Map锛宬ey 涓哄尯鍩熷潗鏍囩紪鐮侊紝value 涓?{@link SimuMapRegion}
+     * 从磁盘加载指定存档和维度下的全部 region 数据。
+     * 格式非法的文件会被跳过并记录日志。
+     * 
+     * @param worldId 存档标识
+     * @param dimension 维度资源键
+     * @param regions 目标 Map，key 为 region 坐标编码，value 为 region
      */
     public static void loadAll(String worldId, ResourceKey<Level> dimension,
                                Map<Long, SimuMapRegion> regions) {
@@ -245,17 +229,13 @@ public class SimuMapStorage {
                 regions.size(), worldId, dimensionToDir(dimension));
     }
 
-    /**
-     * 寮傛鍔犺浇涓栫晫鍖哄煙缂撳瓨锛岄檷浣庤繘鍏ヤ笘鐣屾椂鐨勪富绾跨▼鍗￠】銆?
-     */
+    /** 异步加载世界 region 缓存。 */
     public static void loadAllAsync(String worldId, ResourceKey<Level> dimension,
                                     Map<Long, SimuMapRegion> regions) {
         LOAD_EXECUTOR.execute(() -> loadAll(worldId, dimension, regions));
     }
 
-    /**
-     * 寮傛鍔犺浇鍒颁复鏃?Map锛屽啀鐢辫皟鐢ㄦ柟鍐冲畾鏄惁鍚堝苟锛岄伩鍏嶈法涓栫晫寮傛鍥炵亴銆?
-     */
+    /** 异步加载到临时 Map，再由调用方决定是否合并。 */
     public static void loadAllAsync(String worldId, ResourceKey<Level> dimension,
                                     Consumer<Map<Long, SimuMapRegion>> callback) {
         LOAD_EXECUTOR.execute(() -> {
@@ -267,10 +247,10 @@ public class SimuMapStorage {
     }
 
     /**
-     * 浠庡崟涓?.smr 鏂囦欢璇诲彇鍖哄煙鏁版嵁銆?
-     *
-     * @param file 鏂囦欢璺緞
-     * @return 鎴愬姛鏃惰繑鍥炲～鍏呭ソ鐨?{@link SimuMapRegionData}锛屾牸寮忛潪娉曟椂杩斿洖 {@code null}
+     * 从单个 .smr 文件读取 region 数据。
+     * 
+     * @param file 文件路径
+     * @return 成功时返回填充好的 region 数据，失败时返回 null
      */
     private static SimuMapRegionData readRegionFile(Path file) {
         try (DataInputStream in = new DataInputStream(Files.newInputStream(file))) {
@@ -308,10 +288,10 @@ public class SimuMapStorage {
     }
 
     /**
-     * 灏嗗瓧绗︿覆涓笉鍚堟硶鐨勬枃浠剁郴缁熷瓧绗︽浛鎹负涓嬪垝绾裤€?
-     *
-     * @param s 鍘熷瀛楃涓?
-     * @return 娓呯悊鍚庣殑瀛楃涓?
+     * 将字符串中不合法的文件系统字符替换为下划线。
+     * 
+     * @param s 原始字符串
+     * @return 清理后的字符串
      */
     private static String sanitize(String s) {
         return s.replaceAll("[^a-zA-Z0-9._\\-]", "_");

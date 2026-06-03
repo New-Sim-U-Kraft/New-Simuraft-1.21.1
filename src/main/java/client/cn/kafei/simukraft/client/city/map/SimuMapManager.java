@@ -17,22 +17,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Simukraft 鍦板浘绠＄悊鍣ㄣ€?
- * 绠＄悊鎵€鏈夊尯鍩?({@link SimuMapRegion}) 鐨勫垱寤恒€佹壂鎻忋€佹覆鏌撳拰鐢熷懡鍛ㄦ湡銆?
- * 鍙傝€?FTB Chunks 鐨?MapManager锛屼絾瀹屽叏鐙珛銆侀浂澶栭儴妯＄粍渚濊禆銆?
- *
- * <p>鐢熷懡鍛ㄦ湡:</p>
- * <ol>
- *   <li>{@link #init()} - 瀹㈡埛绔姞鍏ヤ笘鐣屾椂璋冪敤锛岃嚜鍔ㄤ粠纾佺洏鎭㈠褰撳墠瀛樻。+缁村害鐨勫巻鍙叉暟鎹?/li>
- *   <li>{@link #tick()} - 姣忓鎴风 tick 璋冪敤锛屾墽琛屽閲忔壂鎻忓拰娓叉煋锛涙娴嬬淮搴﹀垏鎹㈡椂鑷姩淇濆瓨/鍔犺浇鏁版嵁</li>
- *   <li>{@link #shutdown()} - 瀹㈡埛绔寮€涓栫晫鏃惰皟鐢紝灏嗗綋鍓嶆暟鎹啓鍏ョ鐩?/li>
- * </ol>
- *
- * <p>鎸佷箙鍖栫瓥鐣ワ細鎸?{@code <瀛樻。鏍囪瘑>/<缁村害>} 鍒嗙洰褰曞瓨鍌紝姣忎釜 region 瀵瑰簲涓€涓?.smr 鏂囦欢锛?
- * 鐢?{@link SimuMapStorage} 缁熶竴璐熻矗璇诲啓銆?/p>
+ * Simukraft 地图管理器。
+ * 管理地图 region 的创建、扫描、渲染、持久化和生命周期。
  */
 public class SimuMapManager {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final int MAX_SCAN_RADIUS = 32;
 
     private static SimuMapManager instance;
 
@@ -46,7 +36,7 @@ public class SimuMapManager {
     private final Map<Long, SimuMapRegion> regions = new ConcurrentHashMap<>();
     // 防止同一个 region 在上一次异步渲染完成前重复提交。
     private final Set<Long> renderingKeys = ConcurrentHashMap.newKeySet();
-
+    // 旧版机制：围绕玩家螺旋扫描附近已加载 chunk。
     private int scanRadius = 12;
     private int chunksPerTick = 4;
     private long tickCount = 0;
@@ -60,52 +50,39 @@ public class SimuMapManager {
     private boolean initialized = false;
     private int loadGeneration = 0;
 
-    /**
-     * 褰撳墠宸插垵濮嬪寲鏃舵墍鍦ㄧ殑缁村害 key锛岀敤浜庢娴嬬淮搴?涓栫晫鍒囨崲銆?
-     */
+    /** 当前地图作用域的维度 key，用于检测世界或维度切换。 */
     @Nullable
     private ResourceKey<Level> currentDimension = null;
 
-    /**
-     * 褰撳墠瀛樻。鐨勫敮涓€鏍囪瘑瀛楃涓诧紝鐢?{@link SimuMapStorage#getCurrentWorldId()} 鎻愪緵銆?
-     * 鍦?{@link #init()} 鏃惰缃紝{@link #shutdown()} 鏃舵竻绌恒€?
-     */
+    /** 当前存档的唯一标识，由 {@link SimuMapStorage#getCurrentWorldId()} 提供。 */
     @Nullable
     private String currentWorldId = null;
 
     /**
-     * 娲昏穬娑堣垂鑰呰鏁板櫒銆?
-     * 澶т簬 0 鏃惰〃绀烘湁鍦板浘鐣岄潰澶勪簬鎵撳紑鐘舵€侊紝{@link #tick()} 鎵嶆墽琛屾壂鎻忓拰娓叉煋銆?
+     * 活跃地图界面计数器。
+     * 大于 0 时使用前台扫描预算并渲染脏 region。
      */
     private int activeConsumers = 0;
 
     private SimuMapManager() {
     }
 
-    /**
-     * 娉ㄥ唽涓€涓椿璺冩秷璐硅€咃紙鍦板浘鐣岄潰鎵撳紑鏃惰皟鐢級銆?
-     */
+    /** 注册一个活跃地图界面。 */
     public void acquireConsumer() {
         activeConsumers++;
     }
 
-    /**
-     * 娉ㄩ攢涓€涓椿璺冩秷璐硅€咃紙鍦板浘鐣岄潰鍏抽棴鏃惰皟鐢級銆?
-     */
+    /** 注销一个活跃地图界面。 */
     public void releaseConsumer() {
         activeConsumers = Math.max(0, activeConsumers - 1);
     }
 
-    /**
-     * 鏄惁瀛樺湪娲昏穬娑堣垂鑰呫€?
-     */
+    /** 是否存在活跃地图界面。 */
     public boolean hasActiveConsumer() {
         return activeConsumers > 0;
     }
 
-    /**
-     * 鑾峰彇鍗曚緥銆?
-     */
+    /** 获取地图管理器单例。 */
     public static SimuMapManager getInstance() {
         if (instance == null) {
             instance = new SimuMapManager();
@@ -113,9 +90,7 @@ public class SimuMapManager {
         return instance;
     }
 
-    /**
-     * 妫€鏌ュ湴鍥剧郴缁熸槸鍚﹀凡鍒濆鍖栥€?
-     */
+    /** 检查地图系统是否已初始化。 */
     public static boolean isAvailable() {
         return instance != null && instance.initialized;
     }
@@ -127,9 +102,7 @@ public class SimuMapManager {
         }
     }
 
-    /**
-     * 鍒濆鍖栧湴鍥剧郴缁燂紝骞朵粠纾佺洏鎭㈠褰撳墠瀛樻。+缁村害鐨勫巻鍙叉壂鎻忔暟鎹€?
-     */
+    /** 初始化地图系统，并从磁盘恢复当前存档和维度的历史扫描数据。 */
     public void init() {
         if (initialized) return;
         initialized = true;
@@ -155,9 +128,7 @@ public class SimuMapManager {
         }
     }
 
-    /**
-     * 鍏抽棴鍦板浘绯荤粺锛氬皢褰撳墠鏁版嵁鍐欏叆纾佺洏锛岀劧鍚庨噴鏀炬墍鏈夊唴瀛樿祫婧愩€?
-     */
+    /** 关闭地图系统，保存当前数据并释放内存/纹理资源。 */
     public void shutdown() {
         if (!initialized) return;
         initialized = false;
@@ -176,35 +147,26 @@ public class SimuMapManager {
         LOGGER.info("Simukraft: Map rendering system shut down.");
     }
 
-    /**
-     * 鑾峰彇鎴栧垱寤烘寚瀹氬潗鏍囩殑鍖哄煙銆?
-     */
+    /** 获取或创建指定坐标的地图 region。 */
     public SimuMapRegion getOrCreateRegion(int regionX, int regionZ) {
         long key = regionKey(regionX, regionZ);
         return regions.computeIfAbsent(key, k -> new SimuMapRegion(regionX, regionZ));
     }
 
-    /**
-     * 鑾峰彇鍖哄煙锛堝彲鑳戒负 null锛夈€?
-     */
+    /** 获取指定坐标的地图 region，可能返回 null。 */
     @Nullable
     public SimuMapRegion getRegion(int regionX, int regionZ) {
         return regions.get(regionKey(regionX, regionZ));
     }
 
-    /**
-     * 鑾峰彇鎸囧畾鑼冨洿鍐呯殑鎵€鏈夊尯鍩熴€?
-     */
+    /** 获取当前已缓存的全部地图 region。 */
     public Collection<SimuMapRegion> getAllRegions() {
         return regions.values();
     }
 
-    /**
-     * 姣?tick 璋冪敤锛氭墽琛屽閲忓尯鍧楁壂鎻忓拰鑴忓尯鍩熸覆鏌撱€?
-     */
+    /** 客户端 tick 调用，后台缓存已加载 chunk，前台打开地图时渲染脏 region。 */
     public void tick() {
         if (!initialized) return;
-        if (activeConsumers <= 0) return;
 
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
@@ -234,11 +196,14 @@ public class SimuMapManager {
 
         tickCount++;
 
-        if (tickCount % 2 == 0) {
-            incrementalScan();
+        boolean active = activeConsumers > 0;
+        int scanInterval = active ? 2 : 8;
+        int scanBudget = active ? chunksPerTick : 1;
+        if (tickCount % scanInterval == 0) {
+            incrementalScan(scanBudget);
         }
 
-        if (tickCount % 10 == 0) {
+        if (active && tickCount % 10 == 0) {
             renderDirtyRegions();
         }
 
@@ -247,9 +212,7 @@ public class SimuMapManager {
         }
     }
 
-    /**
-     * 寮哄埗鎵弿鎸囧畾鑼冨洿鍐呯殑鎵€鏈夊尯鍧椼€?
-     */
+    /** 强制扫描指定半径内的客户端已加载 chunk。 */
     public void forceScanArea(int centerChunkX, int centerChunkZ, int radius) {
         Minecraft mc = Minecraft.getInstance();
         Level level = mc.level;
@@ -260,7 +223,7 @@ public class SimuMapManager {
                 int cx = centerChunkX + dx;
                 int cz = centerChunkZ + dz;
 
-                if (!level.hasChunk(cx, cz)) continue;
+                if (!SimuChunkScanner.isChunkLoaded(level, cx, cz)) continue;
 
                 int regionX = cx >> 5;
                 int regionZ = cz >> 5;
@@ -275,9 +238,7 @@ public class SimuMapManager {
         }
     }
 
-    /**
-     * 寮哄埗閲嶆柊娓叉煋鎵€鏈夊凡鍔犺浇鍖哄煙銆?
-     */
+    /** 强制重新渲染所有已有数据的 region。 */
     public void forceRenderAll() {
         for (SimuMapRegion region : regions.values()) {
             SimuMapRegionData data = region.getData();
@@ -288,7 +249,7 @@ public class SimuMapManager {
         renderDirtyRegions();
     }
 
-    private void incrementalScan() {
+    private void incrementalScan(int maxChunks) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         Level level = mc.level;
@@ -296,24 +257,25 @@ public class SimuMapManager {
 
         int playerCX = player.chunkPosition().x;
         int playerCZ = player.chunkPosition().z;
+        int activeScanRadius = getEffectiveScanRadius();
 
         int scanned = 0;
-        int maxAttempts = chunksPerTick * 4;
+        int maxAttempts = Math.max(maxChunks * 8, 16);
         int attempts = 0;
 
-        while (scanned < chunksPerTick && attempts < maxAttempts) {
+        while (scanned < maxChunks && attempts < maxAttempts) {
             int cx = playerCX + scanCursorDX;
             int cz = playerCZ + scanCursorDZ;
 
             advanceSpiralCursor();
             attempts++;
 
-            if (Math.abs(scanCursorDX) > scanRadius || Math.abs(scanCursorDZ) > scanRadius) {
+            if (Math.abs(scanCursorDX) > activeScanRadius || Math.abs(scanCursorDZ) > activeScanRadius) {
                 resetScanCursor();
                 break;
             }
 
-            if (!level.hasChunk(cx, cz)) continue;
+            if (!SimuChunkScanner.isChunkLoaded(level, cx, cz)) continue;
 
             int regionX = cx >> 5;
             int regionZ = cz >> 5;
@@ -380,10 +342,17 @@ public class SimuMapManager {
         regions.entrySet().removeIf(entry -> {
             SimuMapRegion region = entry.getValue();
             if (now - region.getLastAccessTime() > maxAge) {
-                // 离玩家太近的 region 即使过期也保留，避免地图拖动时反复释放/重载。
-                if (region.distToPlayer() < 512 * 512 * 4) return false;
-                region.release();
-                return true;
+                SimuMapRegionData data = region.getData();
+                if (data == null && !region.isImageLoaded()) {
+                    return true;
+                }
+                if (region.isImageLoaded()) {
+                    // 只释放 GPU 纹理，CPU 侧地形数据继续用于渲染未加载 chunk。
+                    region.releaseTexture();
+                    if (data != null) {
+                        data.markDirty();
+                    }
+                }
             }
             return false;
         });
@@ -425,18 +394,21 @@ public class SimuMapManager {
         });
     }
 
-    /**
-     * 璁剧疆鎵弿鍗婂緞锛堝尯鍧楁暟锛夈€?
-     */
+    /** 设置后台扫描半径，单位为 chunk。 */
     public void setScanRadius(int radius) {
-        this.scanRadius = Math.max(1, Math.min(radius, 32));
+        this.scanRadius = Math.max(1, Math.min(radius, MAX_SCAN_RADIUS));
     }
 
-    /**
-     * 鑾峰彇鎵弿鍗婂緞銆?
-     */
+    /** 获取后台扫描半径，单位为 chunk。 */
     public int getScanRadius() {
         return scanRadius;
+    }
+
+    /** 获取当前实际扫描半径，至少覆盖客户端视距内的已加载 chunk。 */
+    public int getEffectiveScanRadius() {
+        Minecraft mc = Minecraft.getInstance();
+        int clientRadius = mc.options == null ? scanRadius : mc.options.getEffectiveRenderDistance() + 1;
+        return Math.max(scanRadius, Math.min(clientRadius, MAX_SCAN_RADIUS));
     }
 
     private static long regionKey(int regionX, int regionZ) {

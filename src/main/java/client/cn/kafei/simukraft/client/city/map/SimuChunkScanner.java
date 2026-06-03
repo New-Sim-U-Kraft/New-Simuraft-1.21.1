@@ -7,7 +7,8 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FluidState;
@@ -25,7 +26,7 @@ public class SimuChunkScanner {
         Level level = Minecraft.getInstance().level;
         if (level == null) return false;
 
-        ChunkAccess chunk = level.getChunk(chunkX, chunkZ, Objects.requireNonNull(ChunkStatus.FULL), false);
+        ChunkAccess chunk = getLoadedChunk(level, chunkX, chunkZ);
         if (chunk == null) return false;
 
         SimuMapRegionData data = region.getOrCreateData();
@@ -101,6 +102,21 @@ public class SimuChunkScanner {
         return true;
     }
 
+    /** 判断客户端是否已经持有指定 FULL chunk。 */
+    public static boolean isChunkLoaded(Level level, int chunkX, int chunkZ) {
+        return getLoadedChunk(level, chunkX, chunkZ) != null;
+    }
+
+    /** 获取客户端缓存中的 FULL chunk，不触发新 chunk 加载。 */
+    public static ChunkAccess getLoadedChunk(Level level, int chunkX, int chunkZ) {
+        try {
+            return level.getChunk(chunkX, chunkZ, Objects.requireNonNull(ChunkStatus.FULL), false);
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Simukraft: Failed to query loaded client chunk ({}, {}): {}", chunkX, chunkZ, exception.getMessage());
+            return null;
+        }
+    }
+
     public static void scanAroundPlayer(SimuMapManager manager, int radius) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
@@ -115,7 +131,7 @@ public class SimuChunkScanner {
                 int cx = playerChunkX + dx;
                 int cz = playerChunkZ + dz;
 
-                if (!level.hasChunk(cx, cz)) continue;
+                if (!isChunkLoaded(level, cx, cz)) continue;
 
                 int regionX = cx >> 5;
                 int regionZ = cz >> 5;

@@ -3,13 +3,8 @@ package client.cn.kafei.simukraft.client.city.map;
 import java.util.Arrays;
 
 /**
- * 鍗曚釜鍖哄煙锛?12x512 鏂瑰潡锛屽嵆 32x32 鍖哄潡锛夌殑鍦板浘鏁版嵁銆?
- * 鍙傝€?FTB Chunks 鐨?MapRegionData锛屼絾绠€鍖栦负鐙珛瀹炵幇銆?
- *
- * 鏁版嵁甯冨眬:
- *  - height[512*512]:    姣忎釜鏂瑰潡浣嶇疆鏈€楂橀潪绌烘皵鏂瑰潡楂樺害 (short)
- *  - color[512*512]:     姣忎釜鏂瑰潡浣嶇疆瀵瑰簲鐨?ARGB 棰滆壊 (int)
- *  - flags[512*512]:     鏍囧織浣嶏細bit0=姘撮潰, bit1-4=鍏夌収绛夌骇
+ * 单个地图 region 的地形数据。
+ * 一个 region 覆盖 512x512 方块，即 32x32 个 chunk。
  */
 public class SimuMapRegionData {
 
@@ -17,19 +12,19 @@ public class SimuMapRegionData {
     public static final int AREA = SIZE * SIZE;
     public static final short HEIGHT_UNKNOWN = Short.MIN_VALUE;
 
-    /** 鏈€楂橀潪绌烘皵鏂瑰潡楂樺害 */
+    /** 最高非空气方块高度。 */
     public final short[] height = new short[AREA];
 
-    /** 姣忎釜鏂瑰潡浣嶇疆鐨?ARGB 娓叉煋棰滆壊 */
+    /** 每个方块位置对应的 ARGB 渲染颜色。 */
     public final int[] color = new int[AREA];
 
-    /** 鏍囧織浣? bit0=姘撮潰, bit1-4=鍏夌収绛夌骇(0-15) */
+    /** 标志位：bit0=水面，bit1-4=光照等级。 */
     public final short[] flags = new short[AREA];
 
-    /** 姝ゆ暟鎹槸鍚﹀凡琚慨鏀癸紙闇€瑕侀噸鏂版覆鏌擄級 */
+    /** 数据是否被修改，需要重新渲染。 */
     private boolean dirty = true;
 
-    /** 姝ゆ暟鎹搴旂殑鍖哄煙鍧愭爣 */
+    /** 该数据所属 region 坐标。 */
     public final int regionX;
     public final int regionZ;
 
@@ -39,12 +34,12 @@ public class SimuMapRegionData {
         Arrays.fill(height, HEIGHT_UNKNOWN);
     }
 
-    /** 鑾峰彇鎸囧畾鏂瑰潡浣嶇疆鐨勬暟缁勭储寮?*/
+    /** 获取指定 region 内方块位置的数组索引。 */
     public static int index(int localX, int localZ) {
         return (localX & 0x1FF) + (localZ & 0x1FF) * SIZE;
     }
 
-    /** 璁剧疆鎸囧畾浣嶇疆鐨勬暟鎹?*/
+    /** 设置指定位置的地图采样数据。 */
     public void setData(int localX, int localZ, short h, int argbColor, boolean water, int light) {
         int idx = index(localX, localZ);
         short f = (short) ((water ? 1 : 0) | ((light & 0xF) << 1));
@@ -57,42 +52,42 @@ public class SimuMapRegionData {
         dirty = true;
     }
 
-    /** 鑾峰彇鎸囧畾浣嶇疆鐨勯珮搴?*/
+    /** 获取指定位置的高度。 */
     public short getHeight(int localX, int localZ) {
         return height[index(localX, localZ)];
     }
 
-    /** 鑾峰彇鎸囧畾浣嶇疆鐨勯鑹?*/
+    /** 获取指定位置的颜色。 */
     public int getColor(int localX, int localZ) {
         return color[index(localX, localZ)];
     }
 
-    /** 妫€鏌ユ寚瀹氫綅缃槸鍚︿负姘撮潰 */
+    /** 判断指定位置是否为水面。 */
     public boolean isWater(int localX, int localZ) {
         return (flags[index(localX, localZ)] & 1) != 0;
     }
 
-    /** 鑾峰彇鎸囧畾浣嶇疆鐨勫厜鐓х瓑绾?*/
+    /** 获取指定位置的光照等级。 */
     public int getLight(int localX, int localZ) {
         return (flags[index(localX, localZ)] >> 1) & 0xF;
     }
 
-    /** 鏄惁鏈夋湭娓叉煋鐨勪慨鏀?*/
+    /** 判断是否有未渲染的修改。 */
     public boolean isDirty() {
         return dirty;
     }
 
-    /** 鏍囪涓哄凡娓叉煋 */
+    /** 标记为已渲染。 */
     public void clearDirty() {
         dirty = false;
     }
 
-    /** 鏍囪涓洪渶瑕侀噸鏂版覆鏌?*/
+    /** 标记为需要重新渲染。 */
     public void markDirty() {
         dirty = true;
     }
 
-    /** 妫€鏌ヨ鍖哄煙鏄惁瀹屽叏绌虹櫧 */
+    /** 检查该 region 是否完全空白。 */
     public boolean isEmpty() {
         for (short h : height) {
             if (h != HEIGHT_UNKNOWN) return false;
@@ -100,12 +95,12 @@ public class SimuMapRegionData {
         return true;
     }
 
-    /** 鑾峰彇姝ゅ尯鍩熶腑绗竴涓笘鐣屾柟鍧楃殑 X 鍧愭爣 */
+    /** 获取该 region 起点的世界 X 坐标。 */
     public int worldBlockX() {
         return regionX * SIZE;
     }
 
-    /** 鑾峰彇姝ゅ尯鍩熶腑绗竴涓笘鐣屾柟鍧楃殑 Z 鍧愭爣 */
+    /** 获取该 region 起点的世界 Z 坐标。 */
     public int worldBlockZ() {
         return regionZ * SIZE;
     }

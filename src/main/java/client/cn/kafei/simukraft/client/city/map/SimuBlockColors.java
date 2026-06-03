@@ -15,9 +15,8 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Simukraft 鑷湁鐨勬柟鍧楅鑹叉槧灏勭郴缁熴€?
- * 鍙傝€?FTB Chunks 鐨?ColorMapLoader / BlockColors锛屼絾瀹屽叏鐙珛涓嶄緷璧?FTB 搴撱€?
- * 涓烘瘡涓柟鍧楃姸鎬佽绠椾竴涓?ARGB 棰滆壊锛岀敤浜庡湴鍥炬覆鏌撱€?
+ * Simukraft 自有方块颜色映射系统。
+ * 为方块状态计算 ARGB 地图颜色，完全独立于 FTB/Xaero。
  */
 public class SimuBlockColors {
     private static final SimuBlockColors INSTANCE = new SimuBlockColors();
@@ -31,10 +30,7 @@ public class SimuBlockColors {
         return INSTANCE;
     }
 
-    /**
-     * 鍒濆鍖栭鑹茬紦瀛樺拰瑕嗙洊銆?
-     * 搴斿湪瀹㈡埛绔缃樁娈佃皟鐢ㄣ€?
-     */
+    /** 初始化颜色覆盖表。 */
     public void init() {
         if (initialized) return;
         initialized = true;
@@ -77,12 +73,12 @@ public class SimuBlockColors {
     }
 
     /**
-     * 鑾峰彇鏂瑰潡鍦ㄧ粰瀹氫綅缃殑鍦板浘棰滆壊銆?
-     *
-     * @param state  鏂瑰潡鐘舵€?
-     * @param level  涓栫晫瀹炰緥
-     * @param pos    鏂瑰潡浣嶇疆
-     * @return ARGB 棰滆壊鍊?
+     * 获取方块在给定位置的地图颜色。
+     * 
+     * @param state 方块状态
+     * @param level 世界实例
+     * @param pos 方块位置
+     * @return ARGB 颜色值
      */
     public int getBlockColor(BlockState state, Level level, BlockPos pos) {
         Block block = state.getBlock();
@@ -127,51 +123,45 @@ public class SimuBlockColors {
         return 0xFF7F7F7F;
     }
 
-    /**
-     * 鑾峰彇鐢熺墿缇ょ郴鑽夊湴棰滆壊銆?
-     */
+    /** 获取生物群系草地颜色。 */
     private int getBiomeGrassColor(Level level, BlockPos pos) {
         try {
             Biome biome = level.getBiome(Objects.requireNonNull(pos)).value();
             int color = biome.getGrassColor(pos.getX(), pos.getZ());
             return 0xFF000000 | color;
         } catch (Exception e) {
-            return 0xFF7CBB4A; // 榛樿鑽夊湴棰滆壊
+            return 0xFF7CBB4A; // 默认草地颜色
         }
     }
 
-    /**
-     * 鑾峰彇鐢熺墿缇ょ郴鏍戝彾棰滆壊銆?
-     */
+    /** 获取生物群系树叶颜色。 */
     private int getBiomeFoliageColor(Level level, BlockPos pos) {
         try {
             Biome biome = level.getBiome(Objects.requireNonNull(pos)).value();
             int color = biome.getFoliageColor();
             return 0xFF000000 | color;
         } catch (Exception e) {
-            return 0xFF59AE30; // 榛樿鏍戝彾棰滆壊
+            return 0xFF59AE30; // 默认树叶颜色
         }
     }
 
-    /**
-     * 鑾峰彇鐢熺墿缇ょ郴姘翠綋棰滆壊銆?
-     */
+    /** 获取生物群系水体颜色。 */
     private int getBiomeWaterColor(Level level, BlockPos pos) {
         try {
             Biome biome = level.getBiome(Objects.requireNonNull(pos)).value();
             int color = biome.getWaterColor();
             return 0xFF000000 | color;
         } catch (Exception e) {
-            return 0xFF3F76E4; // 榛樿姘撮鑹?
+            return 0xFF3F76E4; // 默认水体颜色
         }
     }
 
     /**
-     * 娣峰悎涓や釜 ARGB 棰滆壊銆?
-     *
-     * @param base    鍩鸿壊
-     * @param overlay 鍙犲姞鑹诧紙alpha 鎺у埗娣峰悎绋嬪害锛?
-     * @return 娣峰悎鍚庣殑棰滆壊
+     * 混合两个 ARGB 颜色。
+     * 
+     * @param base 基色
+     * @param overlay 叠加色，alpha 控制混合强度
+     * @return 混合后的颜色
      */
     public static int blendColors(int base, int overlay) {
         int oa = (overlay >> 24) & 0xFF;
@@ -197,11 +187,11 @@ public class SimuBlockColors {
     }
 
     /**
-     * 璋冭妭棰滆壊浜害銆?
-     *
-     * @param color      ARGB 棰滆壊
-     * @param brightness 浜害璋冭妭閲?[-1.0, 1.0]
-     * @return 璋冭妭鍚庣殑棰滆壊
+     * 调整 ARGB 颜色亮度。
+     * 
+     * @param color ARGB 颜色
+     * @param brightness 亮度调节值，范围 [-1.0, 1.0]
+     * @return 调整后的颜色
      */
     public static int adjustBrightness(int color, float brightness) {
         int a = (color >> 24) & 0xFF;
@@ -227,9 +217,7 @@ public class SimuBlockColors {
         return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
-    /**
-     * 灏?ARGB 杞崲涓?NativeImage 浣跨敤鐨?ABGR 鏍煎紡銆?
-     */
+    /** 将 ARGB 转换为 NativeImage 使用的 ABGR 格式。 */
     public static int toNativeColor(int argb) {
         int a = (argb >> 24) & 0xFF;
         int r = (argb >> 16) & 0xFF;

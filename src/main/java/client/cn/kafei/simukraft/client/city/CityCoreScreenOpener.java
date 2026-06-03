@@ -606,7 +606,9 @@ public final class CityCoreScreenOpener {
         private static final int MAP_SIDE_PADDING = 4;
         private static final int MAP_TOP_PADDING = 4;
         private static final int CURRENT_BORDER_COLOR = 0xCC00DD00;
-        private static final int OTHER_BORDER_COLOR = 0xCCDD0000;
+        private static final int OTHER_BORDER_COLOR = 0xCCFF8800;
+        private static final int CURRENT_CHUNK_FILL_COLOR = 0x5500DD00;
+        private static final int OTHER_CHUNK_FILL_COLOR = 0x55FF8800;
         private static final int GRID_COLOR = 0x40000000;
         private static final int CORE_MARKER_COLOR = 0xFF4080FF;
         private final CityCoreMapResponsePacket packet;
@@ -676,9 +678,6 @@ public final class CityCoreScreenOpener {
             int startChunkZ = (int) Math.floor((-offsetY - height / 2.0D) / chunkSize);
             int endChunkX = startChunkX + visibleChunksX;
             int endChunkZ = startChunkZ + visibleChunksY;
-            if (SimuMapManager.isAvailable()) {
-                mapManager.tick();
-            }
             renderWorldMapTerrain(guiContext, startX, startY, width, height, centerX, centerY);
             renderGridOverlay(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, startChunkX, startChunkZ);
             renderHoveredChunk(guiContext, startX, startY, width, height, centerX, centerY, chunkSize);
@@ -768,9 +767,24 @@ public final class CityCoreScreenOpener {
                     if (!cache.isChunkOwned(chunkLong)) {
                         continue;
                     }
+                    boolean currentCityChunk = cache.isChunkInCurrentCity(chunkLong);
+                    int fillColor = currentCityChunk ? CURRENT_CHUNK_FILL_COLOR : OTHER_CHUNK_FILL_COLOR;
+                    drawChunkFill(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, chunkX, chunkZ, fillColor);
                     // 只绘制领地外边缘，不画相邻已占领区块之间的内部线。
-                    drawChunkOwnershipBorder(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, chunkX, chunkZ, cache.isChunkInCurrentCity(chunkLong) ? CURRENT_BORDER_COLOR : OTHER_BORDER_COLOR);
+                    drawChunkOwnershipBorder(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, chunkX, chunkZ, currentCityChunk ? CURRENT_BORDER_COLOR : OTHER_BORDER_COLOR);
                 }
+            }
+        }
+
+        private void drawChunkFill(GUIContext guiContext, int startX, int startY, int width, int height, double centerX, double centerY, double chunkSize, int chunkX, int chunkZ, int fillColor) {
+            double screenX = centerX + offsetX + chunkX * chunkSize;
+            double screenY = centerY + offsetY + chunkZ * chunkSize;
+            int drawX = Math.max((int) Math.floor(screenX), startX);
+            int drawY = Math.max((int) Math.floor(screenY), startY);
+            int drawWidth = Math.min((int) Math.ceil(screenX + chunkSize), startX + width) - drawX;
+            int drawHeight = Math.min((int) Math.ceil(screenY + chunkSize), startY + height) - drawY;
+            if (drawWidth > 0 && drawHeight > 0) {
+                guiContext.graphics.fill(drawX, drawY, drawX + drawWidth, drawY + drawHeight, fillColor);
             }
         }
 

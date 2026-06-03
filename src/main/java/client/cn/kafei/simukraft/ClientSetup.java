@@ -22,6 +22,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
@@ -52,6 +53,8 @@ public final class ClientSetup {
 
     @SubscribeEvent
     public static void onPlayerLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
+        SimuMapManager.shutdownIfPresent();
+        SimuMapManager.getInstance().init();
         BuildingCacheService.ensureInitialized();
     }
 
@@ -68,6 +71,13 @@ public final class ClientSetup {
         TwoPointSelectionManager.clear();
         NpcPathDebugRenderer.clear();
         client.cn.kafei.simukraft.client.farmland.FarmlandHoverPreview.clear();
+    }
+
+    @SubscribeEvent
+    public static void onClientTickPost(ClientTickEvent.Post event) {
+        if (SimuMapManager.isAvailable()) {
+            SimuMapManager.getInstance().tick();
+        }
     }
 
     private static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {

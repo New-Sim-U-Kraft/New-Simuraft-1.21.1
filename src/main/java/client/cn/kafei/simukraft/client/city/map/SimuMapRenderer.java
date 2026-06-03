@@ -3,9 +3,8 @@ package client.cn.kafei.simukraft.client.city.map;
 import com.mojang.blaze3d.platform.NativeImage;
 
 /**
- * 鍦板浘娓叉煋鍣細灏?{@link SimuMapRegionData} 涓殑棰滆壊/楂樺害鏁版嵁娓叉煋鍒?{@link NativeImage}銆?
- * 鍙傝€?FTB Chunks 鐨?RenderMapImageTask锛屽疄鐜伴槾褰便€佸厜鐓у拰姘撮潰鏁堟灉銆?
- * 瀹屽叏鐙珛浜?FTB/Xaero銆?
+ * 地图渲染器。
+ * 将 {@link SimuMapRegionData} 的颜色和高度数据渲染到 {@link NativeImage}。
  */
 public class SimuMapRenderer {
 
@@ -22,8 +21,8 @@ public class SimuMapRenderer {
     public static void setDrawChunkGrid(boolean v) { drawChunkGrid = v; }
 
     /**
-     * 娓叉煋涓€涓尯鍩熷埌 NativeImage銆?
-     * 鍦ㄥ悗鍙扮嚎绋嬭皟鐢紝缁撴灉鍐欏叆 region 鐨?NativeImage銆?
+     * 渲染一个 region 到 NativeImage。
+     * 该方法在后台渲染线程调用，结果写入 region 的图像缓存。
      */
     public static void renderRegion(SimuMapRegion region) {
         SimuMapRegionData data = region.getData();
@@ -93,18 +92,18 @@ public class SimuMapRenderer {
     }
 
     /**
-     * 鍦ㄥ尯鍩熷浘鍍忎笂缁樺埗鍩庡競鍖哄潡杈规鍙犲姞灞傘€?
-     * 涓嶅～鍏呴鑹诧紝浠呯粯鍒跺妗嗚疆寤擄紙閬靛惊鍩庡競鍖哄潡娓叉煋瑙勮寖锛夈€?
-     *
-     * @param region          鐩爣鍖哄煙
-     * @param chunkX          鍖哄潡X鍧愭爣锛堜笘鐣屽潗鏍囷級
-     * @param chunkZ          鍖哄潡Z鍧愭爣锛堜笘鐣屽潗鏍囷級
-     * @param borderColor     ARGB 杈规棰滆壊
-     * @param borderThickness 杈规鍘氬害锛堝儚绱狅級
-     * @param drawTop         鏄惁缁樺埗涓婅竟妗?
-     * @param drawBottom      鏄惁缁樺埗涓嬭竟妗?
-     * @param drawLeft        鏄惁缁樺埗宸﹁竟妗?
-     * @param drawRight       鏄惁缁樺埗鍙宠竟妗?
+     * 在 region 图像上绘制城市 chunk 边框叠加层。
+     * 只绘制外框，不填充领地颜色。
+     * 
+     * @param region 目标 region
+     * @param chunkX chunk X 坐标
+     * @param chunkZ chunk Z 坐标
+     * @param borderColor ARGB 边框颜色
+     * @param borderThickness 边框厚度，单位为像素
+     * @param drawTop 是否绘制上边框
+     * @param drawBottom 是否绘制下边框
+     * @param drawLeft 是否绘制左边框
+     * @param drawRight 是否绘制右边框
      */
     public static void drawChunkBorder(SimuMapRegion region, int chunkX, int chunkZ,
                                         int borderColor, int borderThickness,
@@ -150,9 +149,7 @@ public class SimuMapRenderer {
         }
     }
 
-    /**
-     * 娣峰悎涓や釜 NativeImage ABGR 鏍煎紡棰滆壊銆?
-     */
+    /** 混合两个 NativeImage ABGR 格式颜色。 */
     private static int blendNativeColors(int base, int overlay) {
         int oa = (overlay >> 24) & 0xFF;
         if (oa == 0) return base;
