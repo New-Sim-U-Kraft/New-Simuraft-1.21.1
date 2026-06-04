@@ -149,7 +149,9 @@ public final class IndustrialWorkService {
             case "require_inputs" -> requireInputs(level, manager, data, building, definition, recipe, step);
             case "require_output_space" -> requireOutputSpace(level, manager, data, building, definition, recipe, step);
             case "use_item" -> useItem(entity, boxRuntime, step, gameTime);
-            case "craft_recipe" -> craftRecipe(level, manager, data, building, definition, recipe, worker, step);
+            case "craft_recipe" -> craftRecipe(level, manager, data, building, definition, recipe, worker, step, false);
+            case "craft_available_recipe", "craft_all_recipe" -> craftRecipe(level, manager, data, building, definition, recipe, worker, step, true);
+            case "real_machine_recipe" -> realMachineRecipe(level, manager, data, building, definition, recipe, worker, entity, step, gameTime);
             case "inspect_container", "open_container" -> inspectContainer(level, manager, data, boxRuntime, building, definition, step, gameTime);
             case "breed_entities", "breed_animals" -> entityAction(manager, data,
                     IndustrialEntityActionService.breed(level, building, definition, step),
@@ -175,6 +177,8 @@ public final class IndustrialWorkService {
             case "require_block", "wait_for_block", "find_block", "check_block" -> requireBlock(manager, data,
                     IndustrialBlockActionService.requireBlock(level, building, definition, step), step);
             case "insert_item", "store_item", "put_item" -> insertItem(level, manager, data, boxRuntime, building, definition, step, gameTime);
+            case "fill_item", "fill_slot", "refill_item", "refill_slot" -> fillItem(manager, data, entity, step,
+                    IndustrialItemFillService.fill(level, building, definition, step, entity.position()));
             case "set_status" -> {
                 setStatus(manager, data,
                         !step.statusKey().isBlank() ? step.statusKey() : "gui.simukraft.industrial.status.running",
@@ -183,6 +187,38 @@ public final class IndustrialWorkService {
             }
             default -> {
                 setStatus(manager, data, "gui.simukraft.industrial.status.invalid_step", type);
+                yield StepResult.WAITING_RETRY;
+            }
+        };
+    }
+
+    private static StepResult fillItem(IndustrialBoxManager manager,
+                                       IndustrialBoxData data,
+                                       CitizenEntity entity,
+                                       IndustrialDefinition.StepDefinition step,
+                                       IndustrialItemFillService.ActionResult result) {
+        return switch (result) {
+            case SUCCESS -> {
+                if (step.swing()) {
+                    entity.triggerWorkSwing(InteractionHand.MAIN_HAND);
+                }
+                setStatus(manager, data, "gui.simukraft.industrial.status.running", "");
+                yield StepResult.PROGRESSED;
+            }
+            case MISSING_TARGET -> {
+                setStatus(manager, data, "gui.simukraft.industrial.status.missing_point", step.point());
+                yield StepResult.WAITING_RETRY;
+            }
+            case INVALID_STEP -> {
+                setStatus(manager, data, "gui.simukraft.industrial.status.invalid_step", step.type());
+                yield StepResult.WAITING_RETRY;
+            }
+            case MISSING_INPUTS -> {
+                setStatus(manager, data, "gui.simukraft.industrial.status.missing_inputs", step.item());
+                yield StepResult.WAITING_RETRY;
+            }
+            case TARGET_BLOCKED -> {
+                setStatus(manager, data, "gui.simukraft.industrial.status.machine_input_blocked", step.point());
                 yield StepResult.WAITING_RETRY;
             }
         };
@@ -456,12 +492,17 @@ public final class IndustrialWorkService {
                                           IndustrialDefinition definition,
                                           IndustrialDefinition.RecipeDefinition recipe,
                                           CitizenData worker,
-                                          IndustrialDefinition.StepDefinition step) {
+                                          IndustrialDefinition.StepDefinition step,
+                                          boolean craftAllAvailable) {
         List<BlockPos> inputContainers = IndustrialControlBoxService.resolveContainerPositions(building, definition, containerName(step.input(), step.container(), "input"));
         List<BlockPos> outputContainers = IndustrialControlBoxService.resolveContainerPositions(building, definition, containerName(step.output(), step.container(), "output"));
         CitizenSkillSnapshot skill = CitizenLevelService.snapshot(worker, CityJobType.INDUSTRIAL_WORKER);
         double multiplier = 1.0D + Math.max(0, skill.level() - 1) * 0.05D;
-        if (!IndustrialInventoryService.craftRecipe(level, inputContainers, outputContainers, recipe, multiplier, level.random)) {
+        IndustrialDefinition.RecipeDefinition effectiveRecipe = stepRecipe(recipe, step);
+        boolean crafted = craftAllAvailable
+                ? IndustrialInventoryService.craftAvailableRecipe(level, inputContainers, outputContainers, effectiveRecipe, multiplier, level.random)
+                : IndustrialInventoryService.craftRecipe(level, inputContainers, outputContainers, effectiveRecipe, multiplier, level.random);
+        if (!crafted) {
             setStatus(manager, data, "gui.simukraft.industrial.status.craft_blocked", "");
             return StepResult.WAITING_RETRY;
         }
@@ -469,6 +510,42 @@ public final class IndustrialWorkService {
         setCitizenStatus(level, worker, "gui.simukraft.industrial.status.running", "");
         setStatus(manager, data, "gui.simukraft.industrial.status.running", "");
         return StepResult.PROGRESSED;
+    }
+
+    private static IndustrialDefinition.RecipeDefinition stepRecipe(IndustrialDefinition.RecipeDefinition recipe, IndustrialDefinition.StepDefinition step) {
+        if (!step.inputsOverride() && !step.outputsOverride()) {
+            return recipe;
+        }
+        return new IndustrialDefinition.RecipeDefinition(
+                recipe.id(),
+                recipe.name(),
+                recipe.heldItem(),
+                step.inputsOverride() ? step.inputs() : recipe.inputs(),
+                step.outputsOverride() ? step.outputs() : recipe.outputs(),
+                recipe.steps()
+        );
+    }
+
+    private static StepResult realMachineRecipe(ServerLevel level,
+                                                IndustrialBoxManager manager,
+                                                IndustrialBoxData data,
+                                                PlacedBuildingRecord building,
+                                                IndustrialDefinition definition,
+                                                IndustrialDefinition.RecipeDefinition recipe,
+                                                CitizenData worker,
+                                                CitizenEntity entity,
+                                                IndustrialDefinition.StepDefinition step,
+                                                long gameTime) {
+        IndustrialMachineOperationService.Result result = IndustrialMachineOperationService.execute(level, manager, data, building, definition, recipe, worker, entity, step, gameTime);
+        return switch (result) {
+            case PROGRESSED -> StepResult.PROGRESSED;
+            case WAITING -> StepResult.WAITING;
+            case WAITING_RETRY -> StepResult.WAITING_RETRY;
+            case NEEDS_INPUT -> {
+                IndustrialStepRewindService.rewindForMachineInput(manager, data, recipe, step);
+                yield StepResult.WAITING_RETRY;
+            }
+        };
     }
 
     private static StepResult entityAction(IndustrialBoxManager manager, IndustrialBoxData data, IndustrialEntityActionService.ActionResult result, String successStatusKey) {
@@ -512,12 +589,14 @@ public final class IndustrialWorkService {
     private static void advanceStep(IndustrialBoxManager manager, IndustrialBoxData data, IndustrialDefinition.RecipeDefinition recipe, BoxRuntime boxRuntime) {
         int next = data.currentStep() + 1;
         data.setCurrentStep(next >= recipe.steps().size() ? 0 : next);
+        data.setMachineState("");
         boxRuntime.reset();
         manager.persist(data);
     }
 
     private static void pause(IndustrialBoxManager manager, IndustrialBoxData data, BoxRuntime boxRuntime, String statusKey, String statusText) {
         data.setRunning(false);
+        data.setMachineState("");
         data.setStatusKey(statusKey);
         data.setStatusText(statusText);
         manager.persist(data);

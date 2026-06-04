@@ -29,10 +29,18 @@ public final class CityManager extends SavedData {
     private volatile ServerLevel level;
 
     public static CityManager get(ServerLevel level) {
-        CityManager manager = level.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
-        manager.level = level;
-        manager.loadFromSqlite(level);
+        ServerLevel storageLevel = storageLevel(level);
+        CityManager manager = storageLevel.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        manager.level = storageLevel;
+        manager.loadFromSqlite(storageLevel);
         return manager;
+    }
+
+    /**
+     * storageLevel: 城市数据是服务器全局数据，统一挂在主世界，避免多维度副本互相覆盖 SQLite。
+     */
+    private static ServerLevel storageLevel(ServerLevel level) {
+        return level.getServer() != null ? level.getServer().overworld() : level;
     }
 
     private static CityManager load(CompoundTag tag, HolderLookup.Provider registries) {

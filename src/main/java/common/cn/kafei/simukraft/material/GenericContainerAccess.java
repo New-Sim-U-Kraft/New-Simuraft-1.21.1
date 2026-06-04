@@ -109,6 +109,26 @@ public final class GenericContainerAccess {
         return stack;
     }
 
+    public static List<ItemStack> simulateInsert(ServerLevel level, BlockPos pos, List<ItemStack> stacks) {
+        List<ItemStack> remaining = normalizeStacks(stacks);
+        if (level == null || pos == null || remaining.isEmpty() || !level.isLoaded(pos)) {
+            return remaining;
+        }
+        try {
+            ItemHandlerAccess handlerAccess = resolveItemHandler(level, pos);
+            if (handlerAccess != null) {
+                return simulateInsertIntoItemHandler(handlerAccess.handler(), remaining);
+            }
+            Container container = resolveContainer(level, pos);
+            if (container != null) {
+                return simulateInsertIntoContainer(container, remaining);
+            }
+        } catch (RuntimeException exception) {
+            SimuKraft.LOGGER.warn("Simukraft: Failed to simulate batch insertion into container at {}", pos, exception);
+        }
+        return remaining;
+    }
+
     public static int countInsertable(ServerLevel level, BlockPos pos, ItemStack stack) {
         if (level == null || pos == null || stack == null || stack.isEmpty() || !level.isLoaded(pos)) {
             return 0;
@@ -127,6 +147,112 @@ public final class GenericContainerAccess {
             SimuKraft.LOGGER.warn("Simukraft: Failed to simulate item insertion into container at {}", pos, exception);
         }
         return 0;
+    }
+
+    private static List<ItemStack> normalizeStacks(List<ItemStack> stacks) {
+        if (stacks == null || stacks.isEmpty()) {
+            return List.of();
+        }
+        List<ItemStack> result = new ArrayList<>();
+        for (ItemStack stack : stacks) {
+            if (stack != null && !stack.isEmpty()) {
+                result.add(stack.copy());
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static List<ItemStack> simulateInsertIntoItemHandler(IItemHandler handler, List<ItemStack> stacks) {
+        if (handler == null || handler.getSlots() <= 0) {
+            return stacks;
+        }
+        List<ItemStack> virtualSlots = new ArrayList<>();
+        for (int slot = 0; slot < handler.getSlots(); slot++) {
+            virtualSlots.add(handler.getStackInSlot(slot).copy());
+        }
+        List<ItemStack> remainingStacks = new ArrayList<>();
+        for (ItemStack stack : stacks) {
+            ItemStack remaining = stack.copy();
+            mergeIntoVirtualItemHandler(handler, virtualSlots, remaining, false);
+            mergeIntoVirtualItemHandler(handler, virtualSlots, remaining, true);
+            if (!remaining.isEmpty()) {
+                remainingStacks.add(remaining);
+            }
+        }
+        return List.copyOf(remainingStacks);
+    }
+
+    private static void mergeIntoVirtualItemHandler(IItemHandler handler, List<ItemStack> virtualSlots, ItemStack remaining, boolean emptySlots) {
+        for (int slot = 0; slot < virtualSlots.size() && !remaining.isEmpty(); slot++) {
+            ItemStack existing = virtualSlots.get(slot);
+            if (emptySlots != existing.isEmpty() || !handler.isItemValid(slot, remaining)) {
+                continue;
+            }
+            if (existing.isEmpty()) {
+                int movable = Math.min(remaining.getCount(), Math.min(handler.getSlotLimit(slot), remaining.getMaxStackSize()));
+                if (movable > 0) {
+                    virtualSlots.set(slot, remaining.copyWithCount(movable));
+                    remaining.shrink(movable);
+                }
+                continue;
+            }
+            if (!ItemStack.isSameItemSameComponents(existing, remaining)) {
+                continue;
+            }
+            int maxStack = Math.min(handler.getSlotLimit(slot), existing.getMaxStackSize());
+            int movable = Math.min(remaining.getCount(), maxStack - existing.getCount());
+            if (movable > 0) {
+                existing.grow(movable);
+                remaining.shrink(movable);
+            }
+        }
+    }
+
+    private static List<ItemStack> simulateInsertIntoContainer(Container container, List<ItemStack> stacks) {
+        if (container == null || container.getContainerSize() <= 0) {
+            return stacks;
+        }
+        List<ItemStack> virtualSlots = new ArrayList<>();
+        for (int slot = 0; slot < container.getContainerSize(); slot++) {
+            virtualSlots.add(container.getItem(slot).copy());
+        }
+        List<ItemStack> remainingStacks = new ArrayList<>();
+        for (ItemStack stack : stacks) {
+            ItemStack remaining = stack.copy();
+            mergeIntoVirtualContainer(container, virtualSlots, remaining, false);
+            mergeIntoVirtualContainer(container, virtualSlots, remaining, true);
+            if (!remaining.isEmpty()) {
+                remainingStacks.add(remaining);
+            }
+        }
+        return List.copyOf(remainingStacks);
+    }
+
+    private static void mergeIntoVirtualContainer(Container container, List<ItemStack> virtualSlots, ItemStack remaining, boolean emptySlots) {
+        for (int slot = 0; slot < virtualSlots.size() && !remaining.isEmpty(); slot++) {
+            ItemStack existing = virtualSlots.get(slot);
+            if (emptySlots != existing.isEmpty() || !container.canPlaceItem(slot, remaining)) {
+                continue;
+            }
+            if (existing.isEmpty()) {
+                int maxStack = Math.min(container.getMaxStackSize(), remaining.getMaxStackSize());
+                int movable = Math.min(remaining.getCount(), maxStack);
+                if (movable > 0) {
+                    virtualSlots.set(slot, remaining.copyWithCount(movable));
+                    remaining.shrink(movable);
+                }
+                continue;
+            }
+            if (!ItemStack.isSameItemSameComponents(existing, remaining)) {
+                continue;
+            }
+            int maxStack = Math.min(container.getMaxStackSize(), existing.getMaxStackSize());
+            int movable = Math.min(remaining.getCount(), maxStack - existing.getCount());
+            if (movable > 0) {
+                existing.grow(movable);
+                remaining.shrink(movable);
+            }
+        }
     }
 
     private static int countInsertableInContainer(Container container, ItemStack stack) {

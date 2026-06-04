@@ -77,7 +77,17 @@ public record IndustrialDefinition(String id,
                                  String fluid,
                                  boolean consume,
                                  boolean replace,
-                                 boolean dropItems) {
+                                 boolean dropItems,
+                                 String outputPolicy,
+                                 int timeoutTicks,
+                                 int pollTicks,
+                                 int slot,
+                                 int targetCount,
+                                 int thresholdCount,
+                                 boolean inputsOverride,
+                                 boolean outputsOverride,
+                                 List<ItemRequirement> inputs,
+                                 List<ProductOutput> outputs) {
     }
 
     public enum SelectionMode {

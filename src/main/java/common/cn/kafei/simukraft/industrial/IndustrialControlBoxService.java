@@ -78,8 +78,10 @@ public final class IndustrialControlBoxService {
         if (definition == null || definition.recipeById(recipeId) == null) {
             return false;
         }
+        IndustrialMachineOperationService.abort(level, data, "recipe_changed");
         data.setSelectedRecipeId(recipeId);
         data.setCurrentStep(0);
+        data.setMachineState("");
         data.setStatusKey("gui.simukraft.industrial.status.recipe_selected");
         data.setStatusText("");
         manager.persist(data);
@@ -90,7 +92,9 @@ public final class IndustrialControlBoxService {
         IndustrialBoxManager manager = IndustrialBoxManager.get(level);
         IndustrialBoxData data = manager.getOrCreate(boxPos);
         if (data.running()) {
+            IndustrialMachineOperationService.abort(level, data, "manual_pause");
             data.setRunning(false);
+            data.setMachineState("");
             data.setStatusKey("gui.simukraft.industrial.status.paused");
             data.setStatusText("");
             CitizenData worker = findAssignedWorker(level, boxPos);
@@ -134,14 +138,16 @@ public final class IndustrialControlBoxService {
         if (worker != null) {
             common.cn.kafei.simukraft.citizen.CitizenJobVisualService.clearMainHandOverride(worker.uuid());
         }
+        IndustrialBoxData data = IndustrialBoxManager.get(level).getOrCreate(boxPos);
+        IndustrialMachineOperationService.abort(level, data, "industrial_fired");
         CitizenEmploymentService.fireAssigned(level,
                 CitizenEmploymentService.workplaceId(IndustrialConstants.HIRE_SOURCE_TYPE, IndustrialConstants.HIRE_ROLE, boxPos),
                 IndustrialConstants.HIRE_SOURCE_TYPE,
                 IndustrialConstants.HIRE_ROLE,
                 boxPos,
                 "industrial_fired");
-        IndustrialBoxData data = IndustrialBoxManager.get(level).getOrCreate(boxPos);
         data.setRunning(false);
+        data.setMachineState("");
         data.setStatusKey("gui.simukraft.industrial.status.worker_fired");
         data.setStatusText("");
         IndustrialBoxManager.get(level).persist(data);
@@ -156,7 +162,9 @@ public final class IndustrialControlBoxService {
             if (!citizenId.equals(assigned)) {
                 continue;
             }
+            IndustrialMachineOperationService.abort(level, data, reason);
             data.setRunning(false);
+            data.setMachineState("");
             data.setStatusKey("gui.simukraft.industrial.status.interrupted");
             data.setStatusText(reason != null ? reason : "");
             IndustrialBoxManager.get(level).persist(data);
@@ -245,12 +253,14 @@ public final class IndustrialControlBoxService {
         }
         boolean changed = false;
         if (building != null && !building.buildingId().toString().equals(data.buildingId())) {
+            IndustrialMachineOperationService.abort(level, data, "building_changed");
             data.setBuildingId(building.buildingId().toString());
             data.setSpawnEntityDone(false);
             changed = true;
         }
         if (definition != null) {
             if (!definition.id().equals(data.definitionId())) {
+                IndustrialMachineOperationService.abort(level, data, "definition_changed");
                 data.setDefinitionId(definition.id());
                 data.setSpawnEntityDone(false);
                 changed = true;

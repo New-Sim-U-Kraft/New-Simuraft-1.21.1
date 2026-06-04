@@ -71,6 +71,7 @@ public final class IndustrialBoxSqliteRepository {
                 box.putInt("CurrentStep", resultSet.getInt("current_step"));
                 box.putString("StatusKey", resultSet.getString("status_key"));
                 box.putString("StatusText", resultSet.getString("status_text"));
+                box.putString("MachineState", resultSet.getString("machine_state"));
                 box.putLong("UpdatedAt", resultSet.getLong("updated_at"));
                 boxes.add(box);
             }
@@ -84,9 +85,9 @@ public final class IndustrialBoxSqliteRepository {
 
     private void saveBox(Connection connection, CompoundTag box) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-                "INSERT INTO industrial_boxes(box_pos_long, building_id, definition_id, selected_recipe_id, running, spawn_entity_done, current_step, status_key, status_text, updated_at) "
-                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                        + "ON CONFLICT(box_pos_long) DO UPDATE SET building_id = excluded.building_id, definition_id = excluded.definition_id, selected_recipe_id = excluded.selected_recipe_id, running = excluded.running, spawn_entity_done = excluded.spawn_entity_done, current_step = excluded.current_step, status_key = excluded.status_key, status_text = excluded.status_text, updated_at = excluded.updated_at")) {
+                "INSERT INTO industrial_boxes(box_pos_long, building_id, definition_id, selected_recipe_id, running, spawn_entity_done, current_step, status_key, status_text, machine_state, updated_at) "
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                        + "ON CONFLICT(box_pos_long) DO UPDATE SET building_id = excluded.building_id, definition_id = excluded.definition_id, selected_recipe_id = excluded.selected_recipe_id, running = excluded.running, spawn_entity_done = excluded.spawn_entity_done, current_step = excluded.current_step, status_key = excluded.status_key, status_text = excluded.status_text, machine_state = excluded.machine_state, updated_at = excluded.updated_at")) {
             statement.setLong(1, box.getLong("BoxPos"));
             statement.setString(2, box.getString("BuildingId"));
             statement.setString(3, box.getString("DefinitionId"));
@@ -96,7 +97,8 @@ public final class IndustrialBoxSqliteRepository {
             statement.setInt(7, box.getInt("CurrentStep"));
             statement.setString(8, box.getString("StatusKey"));
             statement.setString(9, box.getString("StatusText"));
-            statement.setLong(10, box.getLong("UpdatedAt"));
+            statement.setString(10, box.getString("MachineState"));
+            statement.setLong(11, box.getLong("UpdatedAt"));
             statement.executeUpdate();
         }
     }

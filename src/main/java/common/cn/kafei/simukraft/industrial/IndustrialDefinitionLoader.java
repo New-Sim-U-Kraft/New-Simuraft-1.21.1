@@ -315,7 +315,17 @@ public final class IndustrialDefinitionLoader {
                 stringAny(object, "", "fluid", "liquid"),
                 bool(object, "consume", false),
                 bool(object, "replace", false),
-                bool(object, "dropItems", bool(object, "drop", false))
+                bool(object, "dropItems", bool(object, "drop", false)),
+                stringAny(object, "extract_to_output", "outputPolicy", "output_policy"),
+                Math.max(1, integer(object, "timeoutTicks", integer(object, "timeout", 12000))),
+                Math.max(1, integer(object, "pollTicks", integer(object, "poll", 20))),
+                integer(object, "slot", -1),
+                Math.max(0, integer(object, "targetCount", integer(object, "target", integer(object, "fillTo", 0)))),
+                integer(object, "thresholdCount", integer(object, "threshold", -1)),
+                object.has("inputs"),
+                object.has("outputs"),
+                parseInputs(object.getAsJsonArray("inputs")),
+                parseOutputs(object.getAsJsonArray("outputs"))
         );
     }
 
