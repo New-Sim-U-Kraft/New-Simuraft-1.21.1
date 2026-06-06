@@ -36,6 +36,9 @@ final class PathSnapshotBuilder {
     private static final double NPC_HALF_WIDTH = 0.31D;
     private static final double NPC_HEIGHT = 1.8D;
     private static final double MAX_LOW_STAND_OFFSET = 0.75D;
+    // A legitimate floor support's top sits at or below the cell's own grid Y (collision height
+    // <= 1.0). Anything higher is a fence/wall/closed-gate protruding into the cell, never a surface.
+    private static final double FLOOR_TOP_EPSILON = 1.0E-4D;
 
     private PathSnapshotBuilder() {
     }
@@ -127,6 +130,18 @@ final class PathSnapshotBuilder {
                 return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), standY, false, false, true, 3.2D);
             }
         }
+        // A closed wooden fence gate is hand-openable like a wooden door, so it is a traversable cell
+        // the follower opens on arrival. Unlike a 2-tall door the gate is a single block, so the head
+        // cell must be independently passable and only the gate column itself is ignored for clearance
+        // (assuming it will be open). The woodenDoor flag keeps the waypoint un-smoothable.
+        if (isClosedWoodenFenceGate(foot)) {
+            double standY = supportTop(cache, pos.below(), below);
+            if (!Double.isNaN(standY) && standY - pos.getY() <= FLOOR_TOP_EPSILON
+                    && isBodyPassable(cache, pos.above(), head)
+                    && hasNpcClearance(cache, pos, standY, pos, null)) {
+                return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), standY, false, false, true, 3.2D);
+            }
+        }
         if (!isBodyPassable(cache, pos, foot) || !isBodyPassable(cache, pos.above(), head)) {
             double standY = lowStandY(cache, pos, foot);
             if (!Double.isNaN(standY) && isBodyPassable(cache, pos.above(), head) && hasNpcClearance(cache, pos, standY, null, null)) {
@@ -136,6 +151,12 @@ final class PathSnapshotBuilder {
         }
         double standY = supportTop(cache, pos.below(), below);
         if (Double.isNaN(standY)) {
+            return null;
+        }
+        // Reject standing on the cap of a fence, wall or closed gate: their 1.5-high collision makes
+        // the support top protrude into this cell, but vanilla ground navigation treats them as
+        // non-walkable and the slim post cannot actually carry the body.
+        if (standY - pos.getY() > FLOOR_TOP_EPSILON) {
             return null;
         }
         if (!hasNpcClearance(cache, pos, standY, null, null)) {
@@ -157,8 +178,39 @@ final class PathSnapshotBuilder {
         }
         return state.isAir()
                 || state.getFluidState().is(FluidTags.WATER)
-                || cache.shape(pos, state).isEmpty()
-                || isClimbable(state);
+                || isClimbable(state)
+                || clearsNpcFootprint(cache, pos, state);
+    }
+
+    /**
+     * Returns whether the block's collision shape leaves the citizen's centred footprint column
+     * free, i.e. a body standing at the block's centre would not intersect it.
+     *
+     * <p>This generalises the previous {@code shape.isEmpty()} test: a thin, face-hugging partial
+     * shape the slim body actually clears — an open trapdoor pinned to one wall, a wall lever or
+     * button — is now passable, which is what lets a citizen climb a ladder out through an open
+     * trapdoor or stand under one. A shape that fills the footprint (a closed trapdoor on the floor,
+     * a slab, a fence post, a closed gate) still reports blocking, so it is routed onto via {@link
+     * #lowStandY} or jumped/avoided exactly as before. The test is horizontal-only because the body
+     * spans the whole block height wherever this column is its foot or the lower part of its head,
+     * which keeps it conservative for head blocks.
+     */
+    private static boolean clearsNpcFootprint(SampleCache cache, BlockPos pos, BlockState state) {
+        VoxelShape shape = cache.shape(pos, state);
+        if (shape.isEmpty()) {
+            return true;
+        }
+        double minX = pos.getX() + 0.5D - NPC_HALF_WIDTH;
+        double maxX = pos.getX() + 0.5D + NPC_HALF_WIDTH;
+        double minZ = pos.getZ() + 0.5D - NPC_HALF_WIDTH;
+        double maxZ = pos.getZ() + 0.5D + NPC_HALF_WIDTH;
+        for (AABB box : shape.toAabbs()) {
+            if (pos.getX() + box.maxX > minX && pos.getX() + box.minX < maxX
+                    && pos.getZ() + box.maxZ > minZ && pos.getZ() + box.minZ < maxZ) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static boolean hasBodyPassage(SampleCache cache, BlockPos pos) {
@@ -253,6 +305,12 @@ final class PathSnapshotBuilder {
                 && !state.getValue(DoorBlock.OPEN)
                 && state.hasProperty(DoorBlock.HALF)
                 && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER;
+    }
+
+    private static boolean isClosedWoodenFenceGate(BlockState state) {
+        return state.getBlock() instanceof FenceGateBlock
+                && state.hasProperty(FenceGateBlock.OPEN)
+                && !state.getValue(FenceGateBlock.OPEN);
     }
 
     private static boolean isMatchingWoodenDoorHead(BlockState state) {

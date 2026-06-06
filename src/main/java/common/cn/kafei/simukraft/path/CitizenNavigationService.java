@@ -12,10 +12,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -65,6 +69,10 @@ public final class CitizenNavigationService {
     private static final int STALLED_TELEPORT_TICKS = 1200;
     private static final int DEBUG_SYNC_PATH_LIMIT = 96;
     private static final double DEBUG_SYNC_RADIUS = 192.0D;
+    private static final double DOOR_INTERACT_RANGE_SQR = 9.0D;
+    private static final double DOOR_CLEAR_RANGE_SQR = 2.25D;
+    private static final double DOOR_DOORWAY_RANGE_SQR = 1.44D;
+    private static final int MAX_TRACKED_DOORS = 128;
     private static volatile ExecutorService pathExecutor;
     private static volatile int executorSize;
 
@@ -270,6 +278,7 @@ public final class CitizenNavigationService {
         LevelRuntime runtime = runtime(level);
         applyCompletedPaths(level, runtime);
         tickActivePaths(level, runtime);
+        processOpenedBarriers(level, runtime);
         processQueuedRequests(level, runtime);
         if (level.getGameTime() % 200L == 0L) {
             runtime.pathCache.cleanup(level.getGameTime());
@@ -387,7 +396,7 @@ public final class CitizenNavigationService {
                 iterator.remove();
                 continue;
             }
-            ActiveTickResult result = entry.getValue().tick(level, citizen);
+            ActiveTickResult result = entry.getValue().tick(level, citizen, runtime);
             if (result == ActiveTickResult.RUNNING) {
                 continue;
             }
@@ -543,18 +552,164 @@ public final class CitizenNavigationService {
         return nearest;
     }
 
-    private static void tryOpenWoodenDoor(ServerLevel level, CitizenEntity citizen, PathWaypoint waypoint) {
+    /**
+     * Opens the wooden door or fence gate the citizen is arriving at, recording it so it can be
+     * closed once the citizen has cleared the opening. Only barriers this follower actually flips
+     * from closed to open are tracked; a barrier already open is left as the world set it.
+     */
+    private static void tryOpenBarrier(ServerLevel level, CitizenEntity citizen, PathWaypoint waypoint, LevelRuntime runtime) {
         if (level == null || citizen == null || waypoint == null) {
             return;
         }
         BlockPos doorPos = lowerWoodenDoorPos(level, waypoint.blockPos());
-        if (doorPos == null || citizen.position().distanceToSqr(Vec3.atCenterOf(doorPos)) > 9.0D) {
+        if (doorPos != null) {
+            if (citizen.position().distanceToSqr(Vec3.atCenterOf(doorPos)) <= DOOR_INTERACT_RANGE_SQR) {
+                BlockState state = level.getBlockState(doorPos);
+                if (state.getBlock() instanceof DoorBlock doorBlock && isClosedWoodenLowerDoor(state)) {
+                    doorBlock.setOpen(citizen, level, state, doorPos, true);
+                    trackOpenedBarrier(runtime, level, citizen, doorPos);
+                }
+            }
             return;
         }
-        BlockState state = level.getBlockState(doorPos);
-        if (state.getBlock() instanceof DoorBlock doorBlock && isClosedWoodenLowerDoor(state)) {
-            doorBlock.setOpen(citizen, level, state, doorPos, true);
+        BlockPos gatePos = waypoint.blockPos();
+        if (citizen.position().distanceToSqr(Vec3.atCenterOf(gatePos)) <= DOOR_INTERACT_RANGE_SQR) {
+            BlockState state = level.getBlockState(gatePos);
+            if (isClosedWoodenFenceGate(state)) {
+                setFenceGateOpen(level, citizen, gatePos, state, true);
+                trackOpenedBarrier(runtime, level, citizen, gatePos);
+            }
         }
+    }
+
+    private static void trackOpenedBarrier(LevelRuntime runtime, ServerLevel level, CitizenEntity citizen, BlockPos pos) {
+        if (runtime.openedBarriers.size() >= MAX_TRACKED_DOORS) {
+            evictOldestBarrier(runtime);
+        }
+        runtime.openedBarriers.put(pos.asLong(), new OpenedBarrier(citizen.getUUID(), level.getGameTime()));
+    }
+
+    private static void evictOldestBarrier(LevelRuntime runtime) {
+        Long oldestKey = null;
+        long oldestAt = Long.MAX_VALUE;
+        for (Map.Entry<Long, OpenedBarrier> entry : runtime.openedBarriers.entrySet()) {
+            if (entry.getValue().openedAt() < oldestAt) {
+                oldestAt = entry.getValue().openedAt();
+                oldestKey = entry.getKey();
+            }
+        }
+        if (oldestKey != null) {
+            runtime.openedBarriers.remove(oldestKey);
+        }
+    }
+
+    /**
+     * Closes every tracked door/gate whose opener has cleared the opening (or is gone), re-reading
+     * the live block first so a barrier a player removed or re-closed is never forced and so the
+     * door is not slammed on another citizen still in the doorway.
+     */
+    private static void processOpenedBarriers(ServerLevel level, LevelRuntime runtime) {
+        if (runtime.openedBarriers.isEmpty()) {
+            return;
+        }
+        for (Iterator<Map.Entry<Long, OpenedBarrier>> iterator = runtime.openedBarriers.entrySet().iterator(); iterator.hasNext();) {
+            Map.Entry<Long, OpenedBarrier> entry = iterator.next();
+            BlockPos pos = BlockPos.of(entry.getKey());
+            BlockState state = level.getBlockState(pos);
+            if (!isCloseableBarrier(state)) {
+                iterator.remove();
+                continue;
+            }
+            CitizenEntity opener = CitizenTeleportService.findCitizenEntity(level, entry.getValue().citizenId());
+            boolean cleared = opener == null
+                    || horizontalDistanceSqr(opener.position(), Vec3.atCenterOf(pos)) > DOOR_CLEAR_RANGE_SQR;
+            if (!cleared) {
+                continue;
+            }
+            if (isOtherCitizenInDoorway(level, runtime, pos, entry.getValue().citizenId())) {
+                continue;
+            }
+            closeBarrier(level, opener, pos, state);
+            iterator.remove();
+        }
+    }
+
+    private static boolean isCloseableBarrier(BlockState state) {
+        return isOpenWoodenLowerDoor(state) || isOpenWoodenFenceGate(state);
+    }
+
+    private static void closeBarrier(ServerLevel level, CitizenEntity citizen, BlockPos pos, BlockState state) {
+        if (state.getBlock() instanceof DoorBlock doorBlock && isOpenWoodenLowerDoor(state)) {
+            doorBlock.setOpen(citizen, level, state, pos, false);
+        } else if (isOpenWoodenFenceGate(state)) {
+            setFenceGateOpen(level, citizen, pos, state, false);
+        }
+    }
+
+    /**
+     * Opens or closes a fence gate. {@link FenceGateBlock} exposes no {@code setOpen}, so this
+     * mirrors {@code FenceGateBlock.useWithoutItem}: flip the OPEN state, play the gate's sound and
+     * emit the matching game event.
+     */
+    private static void setFenceGateOpen(ServerLevel level, Entity source, BlockPos pos, BlockState state, boolean open) {
+        if (!(state.getBlock() instanceof FenceGateBlock gate) || !state.hasProperty(FenceGateBlock.OPEN)
+                || state.getValue(FenceGateBlock.OPEN) == open) {
+            return;
+        }
+        level.setBlock(pos, state.setValue(FenceGateBlock.OPEN, open), 10);
+        level.playSound(null, pos, open ? gate.openSound : gate.closeSound, SoundSource.BLOCKS,
+                1.0F, level.getRandom().nextFloat() * 0.1F + 0.9F);
+        level.gameEvent(source, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
+    }
+
+    private static boolean isOtherCitizenInDoorway(ServerLevel level, LevelRuntime runtime, BlockPos pos, UUID excludeId) {
+        Vec3 center = Vec3.atCenterOf(pos);
+        for (UUID id : runtime.active.keySet()) {
+            if (id.equals(excludeId)) {
+                continue;
+            }
+            CitizenEntity other = CitizenTeleportService.findCitizenEntity(level, id);
+            if (other != null && horizontalDistanceSqr(other.position(), center) <= DOOR_DOORWAY_RANGE_SQR) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static double horizontalDistanceSqr(Vec3 a, Vec3 b) {
+        double dx = a.x - b.x;
+        double dz = a.z - b.z;
+        return dx * dx + dz * dz;
+    }
+
+    private static boolean isClosedWoodenFenceGate(BlockState state) {
+        return state.getBlock() instanceof FenceGateBlock
+                && state.hasProperty(FenceGateBlock.OPEN)
+                && !state.getValue(FenceGateBlock.OPEN)
+                && !isPoweredBarrier(state);
+    }
+
+    private static boolean isOpenWoodenFenceGate(BlockState state) {
+        return state.getBlock() instanceof FenceGateBlock
+                && state.hasProperty(FenceGateBlock.OPEN)
+                && state.getValue(FenceGateBlock.OPEN)
+                && !isPoweredBarrier(state);
+    }
+
+    private static boolean isOpenWoodenLowerDoor(BlockState state) {
+        return state.is(BlockTags.WOODEN_DOORS)
+                && state.getBlock() instanceof DoorBlock
+                && state.hasProperty(DoorBlock.OPEN)
+                && state.getValue(DoorBlock.OPEN)
+                && state.hasProperty(DoorBlock.HALF)
+                && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER
+                && !isPoweredBarrier(state);
+    }
+
+    // A barrier held by redstone must not be fought: closing it would just snap back open.
+    private static boolean isPoweredBarrier(BlockState state) {
+        return state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED)
+                && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED);
     }
 
     private static BlockPos lowerWoodenDoorPos(ServerLevel level, BlockPos pos) {
@@ -634,6 +789,7 @@ public final class CitizenNavigationService {
         private final ConcurrentMap<UUID, ActiveNavigation> active = new ConcurrentHashMap<>();
         private final ConcurrentMap<UUID, Long> cooldowns = new ConcurrentHashMap<>();
         private final ConcurrentMap<UUID, Long> blockedSince = new ConcurrentHashMap<>();
+        private final ConcurrentMap<Long, OpenedBarrier> openedBarriers = new ConcurrentHashMap<>();
         private final PathResultCache pathCache = new PathResultCache();
         private final PathSnapshotCache snapshotCache = new PathSnapshotCache();
         private long loadedCitizenCountTick = Long.MIN_VALUE;
@@ -641,6 +797,10 @@ public final class CitizenNavigationService {
     }
 
     private record RunningRequest(CompletableFuture<PathResult> future, PathCacheKey cacheKey) {
+    }
+
+    /** A wooden door or fence gate a citizen opened, tracked so it can be closed once cleared. */
+    private record OpenedBarrier(UUID citizenId, long openedAt) {
     }
 
     private record DebugPathEntry(UUID citizenId, ActiveNavigation navigation, double distanceSqr) {
@@ -680,7 +840,7 @@ public final class CitizenNavigationService {
             return "running";
         }
 
-        private ActiveTickResult tick(ServerLevel level, CitizenEntity citizen) {
+        private ActiveTickResult tick(ServerLevel level, CitizenEntity citizen, LevelRuntime runtime) {
             if (waypoints.isEmpty()) {
                 return ActiveTickResult.COMPLETE;
             }
@@ -707,7 +867,7 @@ public final class CitizenNavigationService {
             PathWaypoint commandWaypoint = waypoint;
             Vec3 commandTarget = commandTarget(citizen.position(), waypointIndex, waypoint, commandWaypoint);
             MovementMode commandMode = commandMode(commandTarget, commandWaypoint);
-            tryOpenWoodenDoor(level, citizen, waypoint);
+            tryOpenBarrier(level, citizen, waypoint, runtime);
             PathCrowdCoordinator.record(level, citizen.getUUID(), citizen.position(), commandTarget);
             boolean crowdYieldTimedOut = false;
             if (!isActionMode(waypoint.mode()) && PathCrowdCoordinator.shouldYield(level, citizen, commandTarget)) {
@@ -785,7 +945,7 @@ public final class CitizenNavigationService {
             }
             double arrivalDistance = arrivalDistance(index, waypoint.mode());
             if (position.distanceToSqr(waypoint.position()) <= arrivalDistance * arrivalDistance) {
-                if (waypoint.mode() == MovementMode.JUMP && (!jumpTriggered || !citizen.onGround())) {
+                if (waypoint.mode() == MovementMode.JUMP && jumpRequiresLiftoff(index, waypoint) && (!jumpTriggered || !citizen.onGround())) {
                     return false;
                 }
                 return true;
@@ -845,6 +1005,17 @@ public final class CitizenNavigationService {
                     && citizen.onGround()
                     && isNearActionStart(citizen.position(), index)
                     && waypoint.position().y > waypoints.get(index - 1).position().y + 0.25D;
+        }
+
+        /**
+         * Returns whether a JUMP waypoint actually needs a manual lift-off. A rise within the auto
+         * step band ({@code <= 0.25}) never satisfies {@link #shouldTriggerJump}, so the body climbs
+         * it by stepping and {@code jumpTriggered} stays false; gating advancement on that flag would
+         * deadlock the citizen under the waypoint. Such tiny JUMP edges therefore advance on arrival
+         * like a walk, while genuine jumps still wait for the jump to fire and the body to land.
+         */
+        private boolean jumpRequiresLiftoff(int index, PathWaypoint waypoint) {
+            return index > 0 && waypoint.position().y - waypoints.get(index - 1).position().y > 0.25D;
         }
 
         private void applyClimbMotion(CitizenEntity citizen, Vec3 commandTarget, MovementMode commandMode) {

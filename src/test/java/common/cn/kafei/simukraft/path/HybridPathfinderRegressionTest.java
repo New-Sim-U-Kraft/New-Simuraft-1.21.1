@@ -186,6 +186,73 @@ class HybridPathfinderRegressionTest {
         assertEquals(MovementMode.WALK, lastWaypoint(result).mode(), "downward ladder exit did not end on a walkable floor");
     }
 
+    /**
+     * Ladder descent below the floor rim: the ladder's top rung sits one block BELOW the standing
+     * floor (no climbable cell at floor level), the common "hole in the floor with a ladder" build.
+     * The citizen must step orthogonally down onto the first rung and climb out at the bottom.
+     */
+    @Test
+    void ladderDescentBelowFloorRim() {
+        Scene scene = new Scene();
+        scene.floor(0, 65, 0).climb(1, 64, 0).climb(1, 63, 0).floor(2, 63, 0);
+        scene.passage(1, 65, 0); // open shaft above the first rung so the citizen can step in
+        PathCase result = scene.path(0, 65, 0, 2, 63, 0);
+        assertSuccess(result);
+        assertNoDiagonalClimbElevation(result);
+        assertTrue(result.result().waypoints().stream()
+                        .anyMatch(waypoint -> waypoint.mode() == MovementMode.CLIMB && waypoint.blockPos().getY() <= 64),
+                "below-rim descent never mounted the ladder");
+        assertEquals(MovementMode.WALK, lastWaypoint(result).mode(), "descent did not end on a walkable floor");
+    }
+
+    /**
+     * Ladder base drop-off: the lowest rung sits above an offset ledge whose directly-below column is
+     * blocked. The citizen must take a controlled orthogonal fall off the ladder onto the lower floor.
+     */
+    @Test
+    void ladderDropOffBottomOntoLowerFloor() {
+        Scene scene = new Scene();
+        scene.floor(0, 66, 0).climb(1, 66, 0).climb(1, 65, 0).floor(2, 64, 0);
+        // (1,64,0) intentionally absent: the directly-below column is blocked.
+        scene.passage(2, 65, 0); // open shaft above the offset landing
+        PathCase result = scene.path(0, 66, 0, 2, 64, 0);
+        assertSuccess(result);
+        assertNoDiagonalVerticalTransitions(result);
+        assertTrue(result.result().waypoints().stream().anyMatch(waypoint -> waypoint.mode() == MovementMode.FALL),
+                "ladder base did not drop off onto the lower floor");
+        assertTrue(containsBlock(result.result(), 2, 64, 0), "drop-off never reached the lower floor");
+    }
+
+    /**
+     * Ladder descent into water: stepping off the lowest rung into a water column must swim, not be
+     * mislabeled as a flat land walk into the pool.
+     */
+    @Test
+    void ladderDescentIntoWaterSwims() {
+        Scene scene = new Scene();
+        scene.floor(0, 65, 0).climb(1, 65, 0).climb(1, 64, 0).water(1, 63, 0);
+        PathCase result = scene.path(0, 65, 0, 1, 63, 0);
+        assertSuccess(result);
+        assertEquals(MovementMode.SWIM, lastWaypoint(result).mode(),
+                "descending off the ladder into water must swim, not walk");
+    }
+
+    /**
+     * Ladder ascent from the floor onto a rung one block up: mounting a ladder whose lowest cell sits
+     * one block above the standing floor must produce an orthogonal CLIMB entry.
+     */
+    @Test
+    void ladderAscentFromFloorToRaisedRung() {
+        Scene scene = new Scene();
+        scene.floor(0, 64, 0).climb(1, 65, 0).climb(1, 66, 0).floor(2, 66, 0);
+        PathCase result = scene.path(0, 64, 0, 2, 66, 0);
+        assertSuccess(result);
+        assertNoDiagonalClimbElevation(result);
+        assertTrue(result.result().waypoints().stream()
+                        .anyMatch(waypoint -> waypoint.mode() == MovementMode.CLIMB && waypoint.blockPos().getY() >= 65),
+                "citizen never mounted the raised ladder rung");
+    }
+
     private static void assertSuccess(PathCase pathCase) {
         assertTrue(pathCase.result().success(), () -> "path failed: " + pathCase.result().reason());
         assertFalse(pathCase.result().waypoints().isEmpty(), "path produced no waypoints");
@@ -205,6 +272,28 @@ class HybridPathfinderRegressionTest {
             BlockPos to = waypoints.get(index).blockPos();
             boolean diagonal = from.getX() != to.getX() && from.getZ() != to.getZ();
             assertFalse(diagonal, () -> "diagonal " + mode + " transition " + from + " -> " + to);
+        }
+    }
+
+    /**
+     * Asserts no CLIMB waypoint that CHANGES elevation is reached by a diagonal step. Mounting or
+     * leaving a ladder one level up or down must stay orthogonal for the same corner-safety reason as
+     * JUMP/FALL; a same-level diagonal entry into an adjacent ladder remains allowed because it is
+     * corner-guarded by {@code diagonalClear}.
+     */
+    private static void assertNoDiagonalClimbElevation(PathCase pathCase) {
+        List<PathWaypoint> waypoints = pathCase.result().waypoints();
+        for (int index = 1; index < waypoints.size(); index++) {
+            if (waypoints.get(index).mode() != MovementMode.CLIMB) {
+                continue;
+            }
+            BlockPos from = waypoints.get(index - 1).blockPos();
+            BlockPos to = waypoints.get(index).blockPos();
+            if (from.getY() == to.getY()) {
+                continue;
+            }
+            boolean diagonal = from.getX() != to.getX() && from.getZ() != to.getZ();
+            assertFalse(diagonal, () -> "diagonal elevation CLIMB transition " + from + " -> " + to);
         }
     }
 

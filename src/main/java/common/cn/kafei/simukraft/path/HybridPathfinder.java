@@ -93,6 +93,7 @@ final class HybridPathfinder {
         }
         if (current.climbable()) {
             addClimbNeighbors(snapshot, current, intent, neighbors);
+            addClimbDropOffNeighbors(snapshot, current, neighbors);
         }
         addWalkNeighbors(snapshot, current, intent, neighbors);
         addSpecialEntryNeighbors(snapshot, current, neighbors);
@@ -157,6 +158,13 @@ final class HybridPathfinder {
      * while changing height. Diagonal elevation changes remain reachable as an L-shaped composition
      * of an orthogonal walk followed by an orthogonal jump or fall, where each composing edge is
      * individually corner-safe.
+     *
+     * <p>This generator also mounts a ladder/vine/scaffold one level above or below an adjacent
+     * floor: a citizen standing on the rim of a shaft must be able to step sideways-and-down onto
+     * the first rung to descend (the common "hole in the floor with a ladder below the rim" build),
+     * or sideways-and-up onto a rung whose lowest cell sits one block above the floor. These
+     * {@code CLIMB} entries are orthogonal-only for the same corner-safety reason, and once the
+     * citizen is on the ladder {@link #addClimbNeighbors} drives the vertical travel.
      */
     private static void addVerticalTransitions(PathSnapshot snapshot, PathCell current, MovementIntent intent, List<Neighbor> output) {
         if (current.climbable()) {
@@ -177,6 +185,19 @@ final class HybridPathfinder {
                         && up.standY() - current.standY() <= 1.25D
                         && hasVerticalPassage(snapshot, current, up)) {
                     output.add(new Neighbor(up, MovementMode.JUMP, 2.5D + distance(current, up)));
+                }
+                if (up != null
+                        && up.climbable()
+                        && up.standY() - current.standY() <= 1.25D
+                        && hasVerticalPassage(snapshot, current, up)) {
+                    output.add(new Neighbor(up, MovementMode.CLIMB, 2.0D + distance(current, up)));
+                }
+                PathCell ladderBelow = snapshot.cell(current.x() + dx, current.y() - 1, current.z() + dz);
+                if (ladderBelow != null
+                        && ladderBelow.climbable()
+                        && current.standY() - ladderBelow.standY() <= 1.25D
+                        && hasVerticalPassage(snapshot, current, ladderBelow)) {
+                    output.add(new Neighbor(ladderBelow, MovementMode.CLIMB, 2.0D + distance(current, ladderBelow)));
                 }
                 for (int fall = 1; fall <= 3; fall++) {
                     PathCell down = snapshot.cell(current.x() + dx, current.y() - fall, current.z() + dz);
@@ -266,6 +287,10 @@ final class HybridPathfinder {
     /**
      * Adds the straight up and down transitions available while climbing a ladder, vine or
      * scaffold.
+     *
+     * <p>The downward edge mirrors the upward edge's water handling: descending off the lowest rung
+     * into a water column is a {@link MovementMode#SWIM}, not a {@code WALK} the follower would drive
+     * as a flat land step into the pool.
      */
     private static void addClimbNeighbors(PathSnapshot snapshot, PathCell current, MovementIntent intent, List<Neighbor> output) {
         PathCell up = snapshot.cell(current.x(), current.y() + 1, current.z());
@@ -274,7 +299,39 @@ final class HybridPathfinder {
         }
         PathCell down = snapshot.cell(current.x(), current.y() - 1, current.z());
         if (down != null) {
-            output.add(new Neighbor(down, down.climbable() ? MovementMode.CLIMB : walkMode(intent), 2.0D));
+            MovementMode downMode = down.water() ? MovementMode.SWIM : down.climbable() ? MovementMode.CLIMB : walkMode(intent);
+            output.add(new Neighbor(down, downMode, 2.0D));
+        }
+    }
+
+    /**
+     * Adds the controlled drop a citizen can take when stepping OFF a ladder/vine/scaffold onto a
+     * floor that is one to three blocks lower and orthogonally adjacent.
+     *
+     * <p>{@link #addVerticalTransitions} early-returns for climbable cells and {@link
+     * #addClimbNeighbors} only travels straight up/down the shaft, so without this edge a ladder
+     * whose base sits above an offset ledge (the directly-below column blocked) is a dead end. Like
+     * the rest of the vertical generators it is orthogonal-only so the body never cuts the
+     * destination-level corner, it reuses {@link #hasVerticalPassage} so it cannot drill through a
+     * solid floor, and a landing in water is a {@link MovementMode#SWIM}.
+     */
+    private static void addClimbDropOffNeighbors(PathSnapshot snapshot, PathCell current, List<Neighbor> output) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0 || dx != 0 && dz != 0) {
+                    continue;
+                }
+                for (int fall = 1; fall <= 3; fall++) {
+                    PathCell down = snapshot.cell(current.x() + dx, current.y() - fall, current.z() + dz);
+                    if (down != null
+                            && !down.climbable()
+                            && current.standY() - down.standY() <= 3.5D
+                            && hasVerticalPassage(snapshot, current, down)) {
+                        output.add(new Neighbor(down, down.water() ? MovementMode.SWIM : MovementMode.FALL, 1.2D + fall));
+                        break;
+                    }
+                }
+            }
         }
     }
 
