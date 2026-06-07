@@ -7,12 +7,15 @@ import common.cn.kafei.simukraft.citizen.CitizenTeleportService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
 import common.cn.kafei.simukraft.commercial.CommercialControlBoxService;
 import common.cn.kafei.simukraft.network.citizen.info.CitizenInfoResponsePacket;
+import common.cn.kafei.simukraft.path.CitizenNavigationService;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.util.Mth;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -24,6 +27,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -46,6 +50,8 @@ public class CitizenEntity extends PathfinderMob {
     private static final EntityDataAccessor<Integer> DATA_WORK_SWING_PULSE = SynchedEntityData.defineId(CitizenEntity.class, EntityDataSerializers.INT);
     private static final String TAG_HUNGER = "Hunger";
     private static final int WORK_SWING_DURATION_TICKS = 6;
+    private static final int WALL_RESCUE_INTERVAL_TICKS = 20;
+    private static final double WALL_RESCUE_COLLISION_DEFLATE = 0.0625D;
     private double hunger = 20.0D;
     private boolean hungerInitialized;
     private int lastWorkSwingPulse = -1;
@@ -78,6 +84,15 @@ public class CitizenEntity extends PathfinderMob {
             }
         }
         return InteractionResult.sidedSuccess(level().isClientSide());
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        if (isSuffocationDamage(source)) {
+            rescueFromWall(true);
+            return false;
+        }
+        return super.hurt(source, amount);
     }
 
     @Override
@@ -117,10 +132,32 @@ public class CitizenEntity extends PathfinderMob {
             if (CitizenTeleportService.reconcileLoadedCitizenEntities(serverLevel, getUUID(), null) != this) {
                 return;
             }
+            rescueFromWall(false);
             // 实体每 tick 确保自己有 CitizenData，数据缺失时会自动补全。
             CitizenData data = CitizenService.ensureCitizen(serverLevel, this);
             CitizenDroppedFoodService.tryEatNearbyFood(serverLevel, this, data);
         }
+    }
+
+    // isSuffocationDamage：只屏蔽墙内窒息伤害，保留其它真实伤害来源。
+    private boolean isSuffocationDamage(DamageSource source) {
+        return source != null && source.is(DamageTypes.IN_WALL);
+    }
+
+    // rescueFromWall：检测到方块碰撞重叠时停止旧导航，并把 NPC 移到附近安全落点。
+    private void rescueFromWall(boolean immediate) {
+        if (!(level() instanceof ServerLevel serverLevel) || !canSyncCitizenData()) {
+            return;
+        }
+        if (!immediate && tickCount % WALL_RESCUE_INTERVAL_TICKS != 0) {
+            return;
+        }
+        AABB collisionBox = getBoundingBox().deflate(WALL_RESCUE_COLLISION_DEFLATE);
+        if (serverLevel.noBlockCollision(this, collisionBox)) {
+            return;
+        }
+        CitizenNavigationService.stop(serverLevel, getUUID());
+        CitizenTeleportService.teleportCitizenToNearbySafePosition(serverLevel, this);
     }
 
     // syncClientWorkSwingPulse：客户端收到服务端脉冲后走原版 swing 动画，不再手写僵硬曲线。

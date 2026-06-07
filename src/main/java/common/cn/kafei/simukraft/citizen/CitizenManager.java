@@ -338,7 +338,11 @@ public final class CitizenManager extends SavedData {
         entity.setStatus(data.status());
         entity.setSkinPath(data.skinPath());
         entity.setWorkStatus(data.workStatus());
-        entity.setStatusLabel(data.statusLabel());
+        if (entity.level() instanceof ServerLevel level) {
+            entity.setStatusLabel(CitizenSelfFeedingService.effectiveStatusLabel(level, data.uuid(), data.statusLabel()));
+        } else {
+            entity.setStatusLabel(data.statusLabel());
+        }
         entity.initializeHungerFromData(data.hunger());
         if (data.age() >= 0) {
             entity.setAge(data.age());

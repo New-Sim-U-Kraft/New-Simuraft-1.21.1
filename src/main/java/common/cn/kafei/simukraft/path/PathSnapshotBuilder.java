@@ -12,6 +12,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -116,12 +118,12 @@ final class PathSnapshotBuilder {
         boolean water = footWater || headWater;
         boolean climbable = isClimbable(foot) || isClimbable(head);
         if (water) {
-            if (!isBodyPassable(cache, pos, foot) || !isBodyPassable(cache, pos.above(), head)) {
+            if (!isFootPassable(cache, pos, foot) || !isHeadPassable(cache, pos.above(), head)) {
                 return null;
             }
             return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), pos.getY(), true, climbable, false, 1.8D);
         }
-        if (climbable && isBodyPassable(cache, pos, foot) && isBodyPassable(cache, pos.above(), head)) {
+        if (climbable && isFootPassable(cache, pos, foot) && isHeadPassable(cache, pos.above(), head)) {
             return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), pos.getY(), false, true, false, 2.0D);
         }
         if (isClosedWoodenLowerDoor(foot) && isMatchingWoodenDoorHead(head)) {
@@ -130,21 +132,9 @@ final class PathSnapshotBuilder {
                 return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), standY, false, false, true, 3.2D);
             }
         }
-        // A closed wooden fence gate is hand-openable like a wooden door, so it is a traversable cell
-        // the follower opens on arrival. Unlike a 2-tall door the gate is a single block, so the head
-        // cell must be independently passable and only the gate column itself is ignored for clearance
-        // (assuming it will be open). The woodenDoor flag keeps the waypoint un-smoothable.
-        if (isClosedWoodenFenceGate(foot)) {
-            double standY = supportTop(cache, pos.below(), below);
-            if (!Double.isNaN(standY) && standY - pos.getY() <= FLOOR_TOP_EPSILON
-                    && isBodyPassable(cache, pos.above(), head)
-                    && hasNpcClearance(cache, pos, standY, pos, null)) {
-                return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), standY, false, false, true, 3.2D);
-            }
-        }
-        if (!isBodyPassable(cache, pos, foot) || !isBodyPassable(cache, pos.above(), head)) {
+        if (!isFootPassable(cache, pos, foot) || !isHeadPassable(cache, pos.above(), head)) {
             double standY = lowStandY(cache, pos, foot);
-            if (!Double.isNaN(standY) && isBodyPassable(cache, pos.above(), head) && hasNpcClearance(cache, pos, standY, null, null)) {
+            if (!Double.isNaN(standY) && isHeadPassable(cache, pos.above(), head, standY - pos.getY()) && hasNpcClearance(cache, pos, standY, null, null)) {
                 return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), standY, false, false, false, 1.05D);
             }
             return null;
@@ -172,14 +162,29 @@ final class PathSnapshotBuilder {
     /**
      * Returns whether the citizen's body can occupy the column at {@code pos} given its block state.
      */
-    private static boolean isBodyPassable(SampleCache cache, BlockPos pos, BlockState state) {
-        if (isOpenDoorOrGate(state)) {
-            return true;
+    private static boolean isFootPassable(SampleCache cache, BlockPos pos, BlockState state) {
+        return isBodyPassable(cache, pos, state, 0.0D, 1.0D);
+    }
+
+    private static boolean isHeadPassable(SampleCache cache, BlockPos pos, BlockState state) {
+        return isBodyPassable(cache, pos, state, 0.0D, NPC_HEIGHT - 1.0D);
+    }
+
+    private static boolean isHeadPassable(SampleCache cache, BlockPos pos, BlockState state, double standOffset) {
+        double localMinY = Math.max(0.0D, standOffset - 1.0D);
+        double localMaxY = Math.max(localMinY, standOffset + NPC_HEIGHT - 1.0D);
+        return isBodyPassable(cache, pos, state, localMinY, localMaxY);
+    }
+
+    private static boolean isBodyPassable(SampleCache cache, BlockPos pos, BlockState state, double localMinY, double localMaxY) {
+        Block block = state.getBlock();
+        if (isDoorLikeBlock(block)) {
+            return isNpcPassableDoorLikeBlock(state, cache.shape(pos, state), localMinY, localMaxY);
         }
         return state.isAir()
                 || state.getFluidState().is(FluidTags.WATER)
                 || isClimbable(state)
-                || clearsNpcFootprint(cache, pos, state);
+                || clearsNpcBodySlice(cache, pos, state, localMinY, localMaxY);
     }
 
     /**
@@ -191,22 +196,26 @@ final class PathSnapshotBuilder {
      * button — is now passable, which is what lets a citizen climb a ladder out through an open
      * trapdoor or stand under one. A shape that fills the footprint (a closed trapdoor on the floor,
      * a slab, a fence post, a closed gate) still reports blocking, so it is routed onto via {@link
-     * #lowStandY} or jumped/avoided exactly as before. The test is horizontal-only because the body
-     * spans the whole block height wherever this column is its foot or the lower part of its head,
-     * which keeps it conservative for head blocks.
+     * #lowStandY} or jumped/avoided exactly as before. The test also checks the occupied vertical
+     * slice, so upper trapdoors above the head are not treated like floor-level blockers.
      */
-    private static boolean clearsNpcFootprint(SampleCache cache, BlockPos pos, BlockState state) {
-        VoxelShape shape = cache.shape(pos, state);
+    private static boolean clearsNpcBodySlice(SampleCache cache, BlockPos pos, BlockState state, double localMinY, double localMaxY) {
+        return clearsNpcBodySlice(cache.shape(pos, state), localMinY, localMaxY);
+    }
+
+    /** clearsNpcBodySlice: 检查中心脚印在指定垂直切片里是否避开碰撞体。 */
+    static boolean clearsNpcBodySlice(VoxelShape shape, double localMinY, double localMaxY) {
         if (shape.isEmpty()) {
             return true;
         }
-        double minX = pos.getX() + 0.5D - NPC_HALF_WIDTH;
-        double maxX = pos.getX() + 0.5D + NPC_HALF_WIDTH;
-        double minZ = pos.getZ() + 0.5D - NPC_HALF_WIDTH;
-        double maxZ = pos.getZ() + 0.5D + NPC_HALF_WIDTH;
+        double minX = 0.5D - NPC_HALF_WIDTH;
+        double maxX = 0.5D + NPC_HALF_WIDTH;
+        double minZ = 0.5D - NPC_HALF_WIDTH;
+        double maxZ = 0.5D + NPC_HALF_WIDTH;
         for (AABB box : shape.toAabbs()) {
-            if (pos.getX() + box.maxX > minX && pos.getX() + box.minX < maxX
-                    && pos.getZ() + box.maxZ > minZ && pos.getZ() + box.minZ < maxZ) {
+            if (box.maxX > minX && box.minX < maxX
+                    && box.maxY > localMinY && box.minY < localMaxY
+                    && box.maxZ > minZ && box.minZ < maxZ) {
                 return false;
             }
         }
@@ -219,8 +228,8 @@ final class PathSnapshotBuilder {
         if (isDangerous(foot) || isDangerous(head)) {
             return false;
         }
-        return isBodyPassable(cache, pos, foot)
-                && isBodyPassable(cache, pos.above(), head)
+        return isFootPassable(cache, pos, foot)
+                && isHeadPassable(cache, pos.above(), head)
                 && hasNpcClearance(cache, pos, pos.getY(), null, null);
     }
 
@@ -287,19 +296,27 @@ final class PathSnapshotBuilder {
         return top;
     }
 
-    private static boolean isOpenDoorOrGate(BlockState state) {
+    /** isNpcPassableDoorLikeBlock: 门、栅栏门、活板门仅在当前陆地寻路状态可通过时放行。 */
+    static boolean isNpcPassableDoorLikeBlock(BlockState state) {
         Block block = state.getBlock();
-        if (block instanceof DoorBlock) {
-            return state.hasProperty(DoorBlock.OPEN) && state.getValue(DoorBlock.OPEN);
+        return isDoorLikeBlock(block) && state.isPathfindable(PathComputationType.LAND);
+    }
+
+    static boolean isNpcPassableDoorLikeBlock(BlockState state, VoxelShape shape, double localMinY, double localMaxY) {
+        Block block = state.getBlock();
+        if (!isDoorLikeBlock(block)) {
+            return false;
         }
-        if (block instanceof FenceGateBlock) {
-            return state.hasProperty(FenceGateBlock.OPEN) && state.getValue(FenceGateBlock.OPEN);
-        }
-        return false;
+        return state.isPathfindable(PathComputationType.LAND)
+                || clearsNpcBodySlice(shape, localMinY, localMaxY);
+    }
+
+    private static boolean isDoorLikeBlock(Block block) {
+        return block instanceof DoorBlock || block instanceof FenceGateBlock || block instanceof TrapDoorBlock;
     }
 
     private static boolean isClosedWoodenLowerDoor(BlockState state) {
-        return state.is(BlockTags.WOODEN_DOORS)
+        return DoorBlock.isWoodenDoor(state)
                 && state.getBlock() instanceof DoorBlock
                 && state.hasProperty(DoorBlock.OPEN)
                 && !state.getValue(DoorBlock.OPEN)
@@ -307,14 +324,8 @@ final class PathSnapshotBuilder {
                 && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER;
     }
 
-    private static boolean isClosedWoodenFenceGate(BlockState state) {
-        return state.getBlock() instanceof FenceGateBlock
-                && state.hasProperty(FenceGateBlock.OPEN)
-                && !state.getValue(FenceGateBlock.OPEN);
-    }
-
     private static boolean isMatchingWoodenDoorHead(BlockState state) {
-        return state.is(BlockTags.WOODEN_DOORS)
+        return DoorBlock.isWoodenDoor(state)
                 && state.getBlock() instanceof DoorBlock
                 && state.hasProperty(DoorBlock.HALF)
                 && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER;

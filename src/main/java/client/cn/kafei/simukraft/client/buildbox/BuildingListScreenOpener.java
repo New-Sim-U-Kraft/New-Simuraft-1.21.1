@@ -12,6 +12,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.UIElement;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Button;
 import common.cn.kafei.simukraft.building.BuildingStructure;
 import common.cn.kafei.simukraft.building.BuildingStructureService;
+import common.cn.kafei.simukraft.ui.RecipeBookSearchUi;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -28,8 +29,8 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional
-;
+import java.util.Objects;
+import java.util.Optional;
 @SuppressWarnings("null")
 @EventBusSubscriber(value = Dist.CLIENT)
 @OnlyIn(Dist.CLIENT)
@@ -64,12 +65,19 @@ public final class BuildingListScreenOpener {
     private static String currentCategory;
     private static BlockPos currentBuildBoxPos;
     private static String selectedBuildingFileName;
+    private static String searchText = "";
     private static PendingPreview pendingPreview;
 
     private BuildingListScreenOpener() {
     }
 
     public static void open(String category, BlockPos buildBoxPos) {
+        boolean newSession = !Objects.equals(currentCategory, category) || !Objects.equals(currentBuildBoxPos, buildBoxPos);
+        if (newSession) {
+            currentPage = 0;
+            selectedBuildingFileName = null;
+            searchText = "";
+        }
         currentCategory = category;
         currentBuildBoxPos = buildBoxPos;
         Minecraft minecraft = Minecraft.getInstance();
@@ -77,12 +85,6 @@ public final class BuildingListScreenOpener {
             return;
         }
         minecraft.execute(() -> minecraft.setScreen(new com.lowdragmc.lowdraglib2.gui.holder.ModularUIScreen(createUi(category, buildBoxPos), Component.empty())));
-    }
-
-    private static void reopen() {
-        if (currentCategory != null && currentBuildBoxPos != null) {
-            open(currentCategory, currentBuildBoxPos);
-        }
     }
 
     @SubscribeEvent
@@ -108,17 +110,11 @@ public final class BuildingListScreenOpener {
         RegionMetrics regions = resolveRegions(screenWidth, screenHeight);
         GridMetrics grid = resolveGridMetrics(regions.cardRegion().width(), regions.cardRegion().height());
         List<BuildingCacheService.BuildingMeta> buildings = BuildingCacheService.getBuildings(category);
-        int pageCount = totalPages(buildings, grid.perPage());
-        currentPage = Math.max(0, Math.min(currentPage, pageCount - 1));
 
         UIElement root = SimuKraftFlexLayout.root(screenSize);
 
         SimuKraftFlexLayout.addTopChrome(root, screenSize, Component.translatable("gui.button.back"), () -> BuildBoxScreenOpener.open(buildBoxPos));
 
-        Component status = buildings.isEmpty()
-                ? Component.translatable("gui.building_list.empty_dir", BuildingCacheService.categoryDirectory(category).toString())
-                : Component.translatable("gui.building_list.status", buildings.size());
-        int statusColor = buildings.isEmpty() ? SimuKraftUiTheme.TEXT_ERROR_COLOR : SimuKraftUiTheme.TEXT_SUCCESS_COLOR;
         UIElement titleRegion = absoluteRegion(regions.titleRegion());
         titleRegion.layout(layout -> {
             layout.flexDirection(FlexDirection.COLUMN);
@@ -130,13 +126,13 @@ public final class BuildingListScreenOpener {
             layout.widthPercent(100);
             layout.height(18);
         }));
-        titleRegion.addChild(textElement(status, regions.titleRegion().width(), statusColor, TextTexture.TextType.NORMAL).layout(layout -> {
+        UIElement statusSlot = new UIElement().layout(layout -> {
             layout.widthPercent(100);
             layout.height(18);
-        }));
+        });
+        titleRegion.addChild(statusSlot);
         root.addChild(titleRegion);
 
-        List<BuildingCacheService.BuildingMeta> pageBuildings = pageBuildings(buildings, currentPage, grid.perPage());
         UIElement cardRegion = absoluteRegion(regions.cardRegion());
         cardRegion.layout(layout -> {
             layout.flexDirection(FlexDirection.ROW);
@@ -147,55 +143,16 @@ public final class BuildingListScreenOpener {
             layout.gapAll(CARD_GAP);
             layout.paddingAll(4);
         });
-        for (int i = 0; i < pageBuildings.size(); i++) {
-            cardRegion.addChild(createBuildingCard(pageBuildings.get(i), grid.cardWidth(), grid.cardHeight(), categoryColor(category)));
-        }
         root.addChild(cardRegion);
 
-        if (selectedBuildingFileName != null) {
-            UIElement infoRegion = absoluteRegion(regions.selectedInfoRegion());
-            infoRegion.setAllowHitTest(false);
-            infoRegion.layout(layout -> {
-                layout.flexDirection(FlexDirection.COLUMN);
-                layout.alignItems(AlignItems.CENTER);
-                layout.justifyContent(AlignContent.CENTER);
-            });
-            infoRegion.addChild(textElement(Component.translatable("gui.building_list.selected", selectedBuildingFileName), regions.selectedInfoRegion().width(), SimuKraftUiTheme.TEXT_WARNING_COLOR, TextTexture.TextType.NORMAL).layout(layout -> {
-                layout.widthPercent(100);
-                layout.height(12);
-            }));
-            root.addChild(infoRegion);
-        }
-
-        Button prevButton = new Button();
-        prevButton.setText(Component.translatable("gui.pagination.previous"));
-        layoutButtonInRegion(prevButton, regions.pagerRegion(), 0.25F, 0.82F);
-        if (currentPage > 0) {
-            prevButton.setOnClick(event -> {
-                currentPage--;
-                reopen();
-            });
-        } else {
-            prevButton.setActive(false);
-        }
-
-        Button nextButton = new Button();
-        nextButton.setText(Component.translatable("gui.pagination.next"));
-        layoutButtonInRegion(nextButton, regions.pagerRegion(), 0.25F, 0.82F);
-        if (currentPage < pageCount - 1) {
-            nextButton.setOnClick(event -> {
-                currentPage++;
-                reopen();
-            });
-        } else {
-            nextButton.setActive(false);
-        }
-
-        UIElement pageLabel = textElement(Component.translatable("gui.pagination.info", currentPage + 1, pageCount), regions.pagerRegion().width() / 3, SimuKraftUiTheme.TEXT_SECONDARY_COLOR, TextTexture.TextType.NORMAL);
-        pageLabel.layout(layout -> {
-            layout.width(Math.max(80, regions.pagerRegion().width() / 3));
-            layout.height(14);
+        UIElement infoRegion = absoluteRegion(regions.selectedInfoRegion());
+        infoRegion.setAllowHitTest(false);
+        infoRegion.layout(layout -> {
+            layout.flexDirection(FlexDirection.COLUMN);
+            layout.alignItems(AlignItems.CENTER);
+            layout.justifyContent(AlignContent.CENTER);
         });
+        root.addChild(infoRegion);
 
         UIElement pagerRegion = absoluteRegion(regions.pagerRegion());
         pagerRegion.layout(layout -> {
@@ -204,32 +161,25 @@ public final class BuildingListScreenOpener {
             layout.justifyContent(AlignContent.CENTER);
             layout.gapAll(Math.max(8, regions.pagerRegion().width() / 28));
         });
-        pagerRegion.addChild(prevButton);
-        pagerRegion.addChild(pageLabel);
-        pagerRegion.addChild(nextButton);
         root.addChild(pagerRegion);
 
-        Button confirmButton = new Button();
-        confirmButton.setText(Component.translatable("gui.button.select"));
-        layoutButtonInRegion(confirmButton, regions.confirmRegion(), 0.88F, 0.82F);
-        if (selectedBuildingFileName != null) {
-            confirmButton.setOnClick(event -> confirmSelectedBuilding());
-        } else {
-            confirmButton.setActive(false);
-        }
         UIElement confirmRegion = absoluteRegion(regions.confirmRegion());
         confirmRegion.layout(layout -> {
             layout.flexDirection(FlexDirection.ROW);
             layout.alignItems(AlignItems.CENTER);
             layout.justifyContent(AlignContent.CENTER);
         });
-        confirmRegion.addChild(confirmButton);
         root.addChild(confirmRegion);
 
+        root.addChild(RecipeBookSearchUi.frameElement(regions.searchRegion().left(), regions.searchRegion().top()));
+        BuildingUiController controller = new BuildingUiController(category, buildings, regions, grid, statusSlot, cardRegion, infoRegion, pagerRegion, confirmRegion);
+        root.addChild(RecipeBookSearchUi.createField(regions.searchRegion().left() + RecipeBookSearchUi.TEXT_OFFSET_X,
+                regions.searchRegion().top() + RecipeBookSearchUi.TEXT_OFFSET_Y, searchText, controller::onSearchChanged));
+        controller.refresh();
         return new ModularUI(SimuKraftUiTheme.createUi(root)).shouldCloseOnEsc(true).shouldCloseOnKeyInventory(false);
     }
 
-    private static UIElement createBuildingCard(BuildingCacheService.BuildingMeta building, int width, int height, int accentColor) {
+    private static UIElement createBuildingCard(BuildingCacheService.BuildingMeta building, int width, int height, int accentColor, Runnable refreshAction) {
         boolean selected = building.structureFileName().equals(selectedBuildingFileName);
         int buttonInset = 2;
         int buttonWidth = Math.max(1, width - buttonInset * 2);
@@ -254,7 +204,7 @@ public final class BuildingListScreenOpener {
         card.addClass("simukraft_card_button");
         card.setOnClick(event -> {
             selectedBuildingFileName = building.structureFileName();
-            reopen();
+            refreshAction.run();
         });
         card.addChild(SimuKraftUiTheme.createDecorationLayer(6, 7, buttonWidth - 12, buttonHeight - 14, "simukraft_card_content_panel"));
 
@@ -335,15 +285,24 @@ public final class BuildingListScreenOpener {
 
     private static RegionMetrics resolveRegions(int screenWidth, int screenHeight) {
         RegionBox titleRegion = relativeBox(screenWidth, screenHeight, TITLE_LEFT_RATIO, TITLE_TOP_RATIO, TITLE_WIDTH_RATIO, TITLE_HEIGHT_RATIO);
-        RegionBox rawCardRegion = relativeBox(screenWidth, screenHeight, CARD_LEFT_RATIO, CARD_TOP_RATIO, CARD_WIDTH_RATIO, CARD_HEIGHT_RATIO);
         RegionBox pagerRegion = relativeBox(screenWidth, screenHeight, PAGER_LEFT_RATIO, PAGER_TOP_RATIO, PAGER_WIDTH_RATIO, PAGER_HEIGHT_RATIO);
         RegionBox confirmRegion = relativeBox(screenWidth, screenHeight, CONFIRM_LEFT_RATIO, CONFIRM_TOP_RATIO, CONFIRM_WIDTH_RATIO, CONFIRM_HEIGHT_RATIO);
+        int searchTop = clamp(Math.max(titleRegion.bottom() + 4, Math.round(screenHeight * 0.155F)), 0,
+                Math.max(0, pagerRegion.top() - RecipeBookSearchUi.FRAME_HEIGHT - MIN_CARD_HEIGHT - 12));
+        RegionBox searchRegion = new RegionBox(
+                clamp((screenWidth - RecipeBookSearchUi.FRAME_WIDTH) / 2, 0, Math.max(0, screenWidth - RecipeBookSearchUi.FRAME_WIDTH)),
+                searchTop,
+                Math.min(RecipeBookSearchUi.FRAME_WIDTH, screenWidth),
+                RecipeBookSearchUi.FRAME_HEIGHT
+        );
+        RegionBox rawCardRegion = relativeBox(screenWidth, screenHeight, CARD_LEFT_RATIO, CARD_TOP_RATIO, CARD_WIDTH_RATIO, CARD_HEIGHT_RATIO);
+        int cardTop = clamp(Math.max(rawCardRegion.top(), searchRegion.bottom() + 6), 0, Math.max(0, pagerRegion.top() - MIN_CARD_HEIGHT - 4));
         int cardBottomLimit = Math.max(rawCardRegion.top() + MIN_CARD_HEIGHT, Math.min(rawCardRegion.bottom(), pagerRegion.top() - 4));
         RegionBox cardRegion = new RegionBox(
                 rawCardRegion.left(),
-                rawCardRegion.top(),
+                cardTop,
                 rawCardRegion.width(),
-                Math.max(MIN_CARD_HEIGHT, cardBottomLimit - rawCardRegion.top())
+                Math.max(MIN_CARD_HEIGHT, cardBottomLimit - cardTop)
         );
         int selectedInfoHeight = Math.max(16, Math.round(screenHeight * SELECTED_INFO_HEIGHT_RATIO));
         RegionBox selectedInfoRegion = new RegionBox(
@@ -354,6 +313,7 @@ public final class BuildingListScreenOpener {
         );
         return new RegionMetrics(
                 titleRegion,
+                searchRegion,
                 cardRegion,
                 selectedInfoRegion,
                 pagerRegion,
@@ -408,6 +368,36 @@ public final class BuildingListScreenOpener {
 
     private static int totalPages(List<BuildingCacheService.BuildingMeta> buildings, int perPage) {
         return Math.max(1, (int) Math.ceil(Math.max(1, buildings.size()) / (double) Math.max(1, perPage)));
+    }
+
+    private static List<BuildingCacheService.BuildingMeta> filteredBuildings(List<BuildingCacheService.BuildingMeta> buildings, String category) {
+        String query = normalizedSearchText();
+        if (query.isBlank()) {
+            return buildings;
+        }
+        return buildings.stream()
+                .filter(building -> matchesSearch(building, category, query))
+                .toList();
+    }
+
+    private static boolean matchesSearch(BuildingCacheService.BuildingMeta building, String category, String query) {
+        return containsSearch(building.name(), query)
+                || containsSearch(building.size(), query)
+                || containsSearch(building.amount(), query)
+                || containsSearch(building.author(), query)
+                || containsSearch(building.metaFileName(), query)
+                || containsSearch(building.structureFileName(), query)
+                || containsSearch(building.category(), query)
+                || containsSearch(category, query)
+                || containsSearch(categoryName(category), query);
+    }
+
+    private static boolean containsSearch(String text, String query) {
+        return text != null && text.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private static String normalizedSearchText() {
+        return searchText == null ? "" : searchText.trim().toLowerCase(Locale.ROOT);
     }
 
     private static void confirmSelectedBuilding() {
@@ -472,6 +462,136 @@ public final class BuildingListScreenOpener {
         return text.substring(0, Math.max(0, maxChars - 2)) + "..";
     }
 
+    private static final class BuildingUiController {
+        private final String category;
+        private final List<BuildingCacheService.BuildingMeta> buildings;
+        private final RegionMetrics regions;
+        private final GridMetrics grid;
+        private final UIElement statusSlot;
+        private final UIElement cardRegion;
+        private final UIElement infoRegion;
+        private final UIElement pagerRegion;
+        private final UIElement confirmRegion;
+
+        private BuildingUiController(String category, List<BuildingCacheService.BuildingMeta> buildings, RegionMetrics regions,
+                                     GridMetrics grid, UIElement statusSlot, UIElement cardRegion, UIElement infoRegion,
+                                     UIElement pagerRegion, UIElement confirmRegion) {
+            this.category = category;
+            this.buildings = buildings;
+            this.regions = regions;
+            this.grid = grid;
+            this.statusSlot = statusSlot;
+            this.cardRegion = cardRegion;
+            this.infoRegion = infoRegion;
+            this.pagerRegion = pagerRegion;
+            this.confirmRegion = confirmRegion;
+        }
+
+        /** onSearchChanged: 搜索变化时只刷新建筑列表，保留输入框焦点。 */
+        private void onSearchChanged(String text) {
+            searchText = text == null ? "" : text;
+            currentPage = 0;
+            selectedBuildingFileName = null;
+            refresh();
+        }
+
+        /** refresh: 根据当前搜索、分页和选中状态重建可变区域。 */
+        private void refresh() {
+            List<BuildingCacheService.BuildingMeta> filteredBuildings = filteredBuildings(buildings, category);
+            int pageCount = totalPages(filteredBuildings, grid.perPage());
+            currentPage = Math.max(0, Math.min(currentPage, pageCount - 1));
+            refreshStatus(filteredBuildings);
+            refreshCards(filteredBuildings);
+            refreshSelectedInfo();
+            refreshPager(pageCount);
+            refreshConfirm();
+        }
+
+        private void refreshStatus(List<BuildingCacheService.BuildingMeta> filteredBuildings) {
+            statusSlot.clearAllChildren();
+            Component status = buildings.isEmpty()
+                    ? Component.translatable("gui.building_list.empty_dir", BuildingCacheService.categoryDirectory(category).toString())
+                    : Component.translatable("gui.building_list.status", filteredBuildings.size());
+            int statusColor = buildings.isEmpty()
+                    ? SimuKraftUiTheme.TEXT_ERROR_COLOR
+                    : filteredBuildings.isEmpty() ? SimuKraftUiTheme.TEXT_WARNING_COLOR : SimuKraftUiTheme.TEXT_SUCCESS_COLOR;
+            statusSlot.addChild(textElement(status, regions.titleRegion().width(), statusColor, TextTexture.TextType.NORMAL).layout(layout -> {
+                layout.widthPercent(100);
+                layout.height(18);
+            }));
+        }
+
+        private void refreshCards(List<BuildingCacheService.BuildingMeta> filteredBuildings) {
+            cardRegion.clearAllChildren();
+            List<BuildingCacheService.BuildingMeta> pageBuildings = pageBuildings(filteredBuildings, currentPage, grid.perPage());
+            for (BuildingCacheService.BuildingMeta building : pageBuildings) {
+                cardRegion.addChild(createBuildingCard(building, grid.cardWidth(), grid.cardHeight(), categoryColor(category), this::refresh));
+            }
+        }
+
+        private void refreshSelectedInfo() {
+            infoRegion.clearAllChildren();
+            if (selectedBuildingFileName == null) {
+                return;
+            }
+            infoRegion.addChild(textElement(Component.translatable("gui.building_list.selected", selectedBuildingFileName),
+                    regions.selectedInfoRegion().width(), SimuKraftUiTheme.TEXT_WARNING_COLOR, TextTexture.TextType.NORMAL).layout(layout -> {
+                layout.widthPercent(100);
+                layout.height(12);
+            }));
+        }
+
+        private void refreshPager(int pageCount) {
+            pagerRegion.clearAllChildren();
+            Button prevButton = new Button();
+            prevButton.setText(Component.translatable("gui.pagination.previous"));
+            layoutButtonInRegion(prevButton, regions.pagerRegion(), 0.25F, 0.82F);
+            if (currentPage > 0) {
+                prevButton.setOnClick(event -> {
+                    currentPage--;
+                    refresh();
+                });
+            } else {
+                prevButton.setActive(false);
+            }
+
+            UIElement pageLabel = textElement(Component.translatable("gui.pagination.info", currentPage + 1, pageCount),
+                    regions.pagerRegion().width() / 3, SimuKraftUiTheme.TEXT_SECONDARY_COLOR, TextTexture.TextType.NORMAL);
+            pageLabel.layout(layout -> {
+                layout.width(Math.max(80, regions.pagerRegion().width() / 3));
+                layout.height(14);
+            });
+
+            Button nextButton = new Button();
+            nextButton.setText(Component.translatable("gui.pagination.next"));
+            layoutButtonInRegion(nextButton, regions.pagerRegion(), 0.25F, 0.82F);
+            if (currentPage < pageCount - 1) {
+                nextButton.setOnClick(event -> {
+                    currentPage++;
+                    refresh();
+                });
+            } else {
+                nextButton.setActive(false);
+            }
+            pagerRegion.addChild(prevButton);
+            pagerRegion.addChild(pageLabel);
+            pagerRegion.addChild(nextButton);
+        }
+
+        private void refreshConfirm() {
+            confirmRegion.clearAllChildren();
+            Button confirmButton = new Button();
+            confirmButton.setText(Component.translatable("gui.button.select"));
+            layoutButtonInRegion(confirmButton, regions.confirmRegion(), 0.88F, 0.82F);
+            if (selectedBuildingFileName != null) {
+                confirmButton.setOnClick(event -> confirmSelectedBuilding());
+            } else {
+                confirmButton.setActive(false);
+            }
+            confirmRegion.addChild(confirmButton);
+        }
+    }
+
     private record PendingPreview(BuildingCacheService.BuildingMeta building, BlockPos buildBoxPos, BuildingStructure structure) {
     }
 
@@ -479,6 +599,7 @@ public final class BuildingListScreenOpener {
     }
 
     private record RegionMetrics(RegionBox titleRegion,
+                                 RegionBox searchRegion,
                                  RegionBox cardRegion,
                                  RegionBox selectedInfoRegion,
                                  RegionBox pagerRegion,

@@ -93,6 +93,7 @@ final class HybridPathfinder {
         }
         if (current.climbable()) {
             addClimbNeighbors(snapshot, current, intent, neighbors);
+            addClimbTopExitNeighbors(snapshot, current, neighbors);
             addClimbDropOffNeighbors(snapshot, current, neighbors);
         }
         addWalkNeighbors(snapshot, current, intent, neighbors);
@@ -302,6 +303,49 @@ final class HybridPathfinder {
             MovementMode downMode = down.water() ? MovementMode.SWIM : down.climbable() ? MovementMode.CLIMB : walkMode(intent);
             output.add(new Neighbor(down, downMode, 2.0D));
         }
+    }
+
+    /**
+     * Adds a virtual climb point above the top rung when the ladder stops one block below a floor.
+     */
+    private static void addClimbTopExitNeighbors(PathSnapshot snapshot, PathCell current, List<Neighbor> output) {
+        PathCell sampledCurrent = snapshot.cell(current.pos());
+        if (sampledCurrent == null || !sampledCurrent.climbable()) {
+            return;
+        }
+        int exitY = current.y() + 1;
+        PathCell sampledTop = snapshot.cell(current.x(), exitY, current.z());
+        if (sampledTop != null && (sampledTop.climbable() || sampledTop.water())) {
+            return;
+        }
+        if (sampledTop == null && !snapshot.bodyPassage(current.x(), exitY, current.z())) {
+            return;
+        }
+        PathCell topExit = sampledTop != null
+                ? sampledTop
+                : new PathCell(new BlockPos(current.x(), exitY, current.z()),
+                current.x(), exitY, current.z(), exitY, false, true, false, 2.0D);
+        if (hasUpperFloorExit(snapshot, topExit)) {
+            output.add(new Neighbor(topExit, MovementMode.CLIMB, 2.0D));
+        }
+    }
+
+    /**
+     * hasUpperFloorExit: 判断虚拟梯顶旁边是否存在可走上层地板。
+     */
+    private static boolean hasUpperFloorExit(PathSnapshot snapshot, PathCell virtualTop) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0 || dx != 0 && dz != 0) {
+                    continue;
+                }
+                PathCell exit = snapshot.cell(virtualTop.x() + dx, virtualTop.y(), virtualTop.z() + dz);
+                if (canWalkOnSameLayer(virtualTop, exit)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**

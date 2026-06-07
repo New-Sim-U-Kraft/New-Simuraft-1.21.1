@@ -4,6 +4,7 @@ import common.cn.kafei.simukraft.network.clientbound.ClientboundNetworkBridge;
 import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenLevelService;
+import common.cn.kafei.simukraft.citizen.CitizenSelfFeedingService;
 import common.cn.kafei.simukraft.citizen.CitizenSkillSnapshot;
 import common.cn.kafei.simukraft.city.CityData;
 import common.cn.kafei.simukraft.city.CityManager;
@@ -48,7 +49,7 @@ public record CitizenInfoResponsePacket(UUID citizenId, String name, String gend
                 data.sick(),
                 data.child(),
                 data.workStatus(),
-                data.statusLabel(),
+                CitizenSelfFeedingService.effectiveStatusLabel(level, data.uuid(), data.statusLabel()),
                 data.jobType().name(),
                 data.jobId(),
                 displayJobName(level, data),

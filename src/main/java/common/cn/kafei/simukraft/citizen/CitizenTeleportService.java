@@ -22,6 +22,10 @@ import java.util.UUID;
 public final class CitizenTeleportService {
     private static final double MAX_TELEPORT_VERTICAL_DELTA = 1.0D;
     private static final double MAX_LOW_STAND_OFFSET = 0.75D;
+    private static final int NEARBY_SAFE_HORIZONTAL_RADIUS = 2;
+    private static final int NEARBY_SAFE_MIN_Y_OFFSET = -1;
+    private static final int NEARBY_SAFE_MAX_Y_OFFSET = 2;
+    private static final double RESCUE_COLLISION_EPSILON = 1.0E-7D;
 
     private CitizenTeleportService() {
     }
@@ -72,6 +76,23 @@ public final class CitizenTeleportService {
             citizenEntity.moveTo(landing.x, landing.y, landing.z, level.random.nextFloat() * 360.0F, 0.0F);
             level.addFreshEntity(citizenEntity);
             CitizenManager.get(level).syncEntity(citizenEntity);
+        }
+        citizenEntity.getNavigation().stop();
+        citizenEntity.setDeltaMovement(Vec3.ZERO);
+        spawnTeleportParticles(level, citizenEntity.position(), citizenEntity.getRandom());
+        citizenEntity.teleportTo(landing.x, landing.y, landing.z);
+        spawnTeleportParticles(level, citizenEntity.position(), citizenEntity.getRandom());
+        return true;
+    }
+
+    // teleportCitizenToNearbySafePosition：NPC 卡进方块时，搜索半径 2 内最近的安全脚底点并救出。
+    public static boolean teleportCitizenToNearbySafePosition(ServerLevel level, CitizenEntity citizenEntity) {
+        if (level == null || citizenEntity == null || citizenEntity.isRemoved()) {
+            return false;
+        }
+        Vec3 landing = nearestSafeLandingAround(level, citizenEntity);
+        if (landing == null) {
+            return false;
         }
         citizenEntity.getNavigation().stop();
         citizenEntity.setDeltaMovement(Vec3.ZERO);
@@ -162,6 +183,48 @@ public final class CitizenTeleportService {
 
     public static boolean isSafeLandingPosition(ServerLevel level, BlockPos pos) {
         return safeLandingPosition(level, pos) != null;
+    }
+
+    // safeLandingTarget：对外提供实际脚底落点，供岗位落点选择复用传送安全判定。
+    public static Vec3 safeLandingTarget(ServerLevel level, BlockPos pos) {
+        return safeLandingPosition(level, pos);
+    }
+
+    // nearestSafeLandingAround：从当前位置向外找最近的可站立脚底点，避免救援传送过远。
+    private static Vec3 nearestSafeLandingAround(ServerLevel level, CitizenEntity citizenEntity) {
+        BlockPos anchor = citizenEntity.blockPosition();
+        Vec3 current = citizenEntity.position();
+        Vec3 best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (int yOffset = NEARBY_SAFE_MIN_Y_OFFSET; yOffset <= NEARBY_SAFE_MAX_Y_OFFSET; yOffset++) {
+            for (int xOffset = -NEARBY_SAFE_HORIZONTAL_RADIUS; xOffset <= NEARBY_SAFE_HORIZONTAL_RADIUS; xOffset++) {
+                for (int zOffset = -NEARBY_SAFE_HORIZONTAL_RADIUS; zOffset <= NEARBY_SAFE_HORIZONTAL_RADIUS; zOffset++) {
+                    BlockPos candidate = anchor.offset(xOffset, yOffset, zOffset);
+                    if (!level.isLoaded(candidate)) {
+                        continue;
+                    }
+                    Vec3 landing = safeLandingPosition(level, candidate);
+                    if (landing == null || !hasEntityClearance(level, citizenEntity, landing)) {
+                        continue;
+                    }
+                    double distance = landing.distanceToSqr(current);
+                    if (best == null || distance < bestDistance) {
+                        best = landing;
+                        bestDistance = distance;
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
+    // hasEntityClearance：用 NPC 当前碰撞盒尺寸复核落点，防止安全脚底点旁边仍有墙体挤压。
+    private static boolean hasEntityClearance(ServerLevel level, CitizenEntity citizenEntity, Vec3 landing) {
+        Vec3 current = citizenEntity.position();
+        AABB landingBox = citizenEntity.getBoundingBox()
+                .move(landing.x - current.x, landing.y - current.y, landing.z - current.z)
+                .deflate(RESCUE_COLLISION_EPSILON);
+        return level.noBlockCollision(citizenEntity, landingBox);
     }
 
     private static Vec3 safeLandingPosition(ServerLevel level, BlockPos pos) {

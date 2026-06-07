@@ -1,6 +1,7 @@
 package common.cn.kafei.simukraft.citizen;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,6 +35,13 @@ class CitizenDataTest {
 
         assertTrue(data.dead());
         assertNull(data.homeId());
+    }
+
+    @Test
+    void selfFeedingStatusIsTemporaryOverlay() {
+        assertTrue(CitizenSelfFeedingService.isSelfFeedingStatusLabel(CitizenSelfFeedingService.GOING_TO_BUY_FOOD_STATUS));
+        assertTrue(CitizenSelfFeedingService.isSelfFeedingStatusLabel(CitizenSelfFeedingService.BUYING_FOOD_STATUS));
+        assertFalse(CitizenSelfFeedingService.isSelfFeedingStatusLabel(CitizenWorkStatus.WORKING.translationKey()));
     }
 
     private static CompoundTag baseCitizenTag(UUID citizenId) {

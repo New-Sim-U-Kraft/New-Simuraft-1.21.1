@@ -22,6 +22,7 @@ import common.cn.kafei.simukraft.industrial.IndustrialConstants;
 import common.cn.kafei.simukraft.network.npc.hire.NpcHireAssignPacket;
 import common.cn.kafei.simukraft.network.npc.hire.NpcHireListRequestPacket;
 import common.cn.kafei.simukraft.network.npc.hire.NpcHireListResponsePacket;
+import common.cn.kafei.simukraft.ui.RecipeBookSearchUi;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -34,6 +35,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @SuppressWarnings("null")
@@ -68,18 +70,20 @@ public final class NpcHireScreen {
     private static final int MIN_CARD_HEIGHT = 76;
     private static UUID selectedNpcId;
     private static int currentPage;
-    private static NpcHireListResponsePacket latestPacket;
+    private static String searchText = "";
 
     private NpcHireScreen() {
     }
 
     public static void request(BlockPos sourcePos, String sourceType, String role) {
         SimuKraft.LOGGER.info("Simukraft: Requesting hire list sourceType={} role={} pos={}", sourceType, role, sourcePos);
+        currentPage = 0;
+        selectedNpcId = null;
+        searchText = "";
         PacketDistributor.sendToServer(new NpcHireListRequestPacket(sourcePos, sourceType, role));
     }
 
     public static void open(NpcHireListResponsePacket packet) {
-        latestPacket = packet;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft == null) {
             return;
@@ -93,13 +97,6 @@ public final class NpcHireScreen {
         });
     }
 
-    private static void reopen() {
-        if (latestPacket != null) {
-            SimuKraft.LOGGER.info("Simukraft: Reopening hire screen page={} selectedNpcId={}", currentPage, selectedNpcId);
-            open(latestPacket);
-        }
-    }
-
     private static ModularUI createUi(NpcHireListResponsePacket packet) {
         try {
             SimuKraftFlexLayout.ScreenSize screenSize = SimuKraftFlexLayout.screenSize();
@@ -107,16 +104,10 @@ public final class NpcHireScreen {
             int screenHeight = screenSize.height();
             RegionMetrics regions = resolveRegions(screenWidth, screenHeight);
             GridMetrics grid = resolveGridMetrics(regions.cardRegion().width(), regions.cardRegion().height());
-            int pageCount = totalPages(packet.candidates(), grid.perPage());
-            currentPage = Math.max(0, Math.min(currentPage, pageCount - 1));
 
             UIElement root = SimuKraftFlexLayout.root(screenSize);
             SimuKraftFlexLayout.addTopChrome(root, screenSize, Component.translatable("gui.button.back"), () -> returnToSource(packet.sourceType(), packet.sourcePos()));
 
-            Component status = packet.candidates().isEmpty()
-                    ? Component.translatable("message.simukraft.no_idle_npcs")
-                    : Component.translatable("gui.select_npc.title", packet.candidates().size(), currentPage + 1, pageCount);
-            int statusColor = packet.candidates().isEmpty() ? SimuKraftUiTheme.TEXT_ERROR_COLOR : SimuKraftUiTheme.TEXT_SUCCESS_COLOR;
             UIElement titleRegion = absoluteRegion(regions.titleRegion());
             titleRegion.layout(layout -> {
                 layout.flexDirection(FlexDirection.COLUMN);
@@ -128,13 +119,13 @@ public final class NpcHireScreen {
                 layout.widthPercent(100);
                 layout.height(18);
             }));
-            titleRegion.addChild(textElement(status, regions.titleRegion().width(), statusColor, TextTexture.TextType.NORMAL).layout(layout -> {
+            UIElement statusSlot = new UIElement().layout(layout -> {
                 layout.widthPercent(100);
                 layout.height(18);
-            }));
+            });
+            titleRegion.addChild(statusSlot);
             root.addChild(titleRegion);
 
-            List<NpcHireListResponsePacket.HireCandidate> pageCandidates = pageCandidates(packet.candidates(), currentPage, grid.perPage());
             UIElement cardRegion = absoluteRegion(regions.cardRegion());
             cardRegion.layout(layout -> {
                 layout.flexDirection(FlexDirection.ROW);
@@ -145,68 +136,16 @@ public final class NpcHireScreen {
                 layout.gapAll(CARD_GAP);
                 layout.paddingAll(4);
             });
-            for (int i = 0; i < pageCandidates.size(); i++) {
-                cardRegion.addChild(candidateCard(packet, pageCandidates.get(i), grid.cardWidth(), grid.cardHeight()));
-            }
             root.addChild(cardRegion);
 
-            if (selectedNpcId != null) {
-                String selectedName = selectedNpcName(packet.candidates(), selectedNpcId);
-                UIElement infoRegion = absoluteRegion(regions.selectedInfoRegion());
-                infoRegion.setAllowHitTest(false);
-                infoRegion.layout(layout -> {
-                    layout.flexDirection(FlexDirection.COLUMN);
-                    layout.alignItems(AlignItems.CENTER);
-                    layout.justifyContent(AlignContent.CENTER);
-                });
-                infoRegion.addChild(textElement(Component.translatable("gui.select_npc.selected", selectedName), regions.selectedInfoRegion().width(), SimuKraftUiTheme.TEXT_WARNING_COLOR, TextTexture.TextType.NORMAL).layout(layout -> {
-                    layout.widthPercent(100);
-                    layout.height(12);
-                }));
-                root.addChild(infoRegion);
-            }
-
-            Button prevButton = new Button();
-            prevButton.setText(Component.translatable("gui.pagination.previous"));
-            layoutButtonInRegion(prevButton, regions.pagerRegion(), 0.25F, 0.82F);
-            if (currentPage > 0) {
-                prevButton.setOnClick(event -> {
-                    currentPage--;
-                    reopen();
-                });
-            } else {
-                prevButton.setActive(false);
-            }
-
-            Button nextButton = new Button();
-            nextButton.setText(Component.translatable("gui.pagination.next"));
-            layoutButtonInRegion(nextButton, regions.pagerRegion(), 0.25F, 0.82F);
-            if (currentPage < pageCount - 1) {
-                nextButton.setOnClick(event -> {
-                    currentPage++;
-                    reopen();
-                });
-            } else {
-                nextButton.setActive(false);
-            }
-
-            Button confirmButton = new Button();
-            confirmButton.setText(Component.translatable("gui.button.hire"));
-            layoutButtonInRegion(confirmButton, regions.confirmRegion(), 0.88F, 0.82F);
-            if (selectedNpcId != null) {
-                confirmButton.setOnClick(event -> {
-                    PacketDistributor.sendToServer(new NpcHireAssignPacket(packet.sourcePos(), packet.sourceType(), packet.role(), selectedNpcId));
-                    returnToSource(packet.sourceType(), packet.sourcePos());
-                });
-            } else {
-                confirmButton.setActive(false);
-            }
-
-            UIElement pageLabel = textElement(Component.translatable("gui.pagination.info", currentPage + 1, pageCount), regions.pagerRegion().width() / 3, SimuKraftUiTheme.TEXT_SECONDARY_COLOR, TextTexture.TextType.NORMAL);
-            pageLabel.layout(layout -> {
-                layout.width(Math.max(80, regions.pagerRegion().width() / 3));
-                layout.height(14);
+            UIElement infoRegion = absoluteRegion(regions.selectedInfoRegion());
+            infoRegion.setAllowHitTest(false);
+            infoRegion.layout(layout -> {
+                layout.flexDirection(FlexDirection.COLUMN);
+                layout.alignItems(AlignItems.CENTER);
+                layout.justifyContent(AlignContent.CENTER);
             });
+            root.addChild(infoRegion);
 
             UIElement pagerRegion = absoluteRegion(regions.pagerRegion());
             pagerRegion.layout(layout -> {
@@ -215,9 +154,6 @@ public final class NpcHireScreen {
                 layout.justifyContent(AlignContent.CENTER);
                 layout.gapAll(Math.max(8, regions.pagerRegion().width() / 28));
             });
-            pagerRegion.addChild(prevButton);
-            pagerRegion.addChild(pageLabel);
-            pagerRegion.addChild(nextButton);
             root.addChild(pagerRegion);
 
             UIElement confirmRegion = absoluteRegion(regions.confirmRegion());
@@ -226,9 +162,13 @@ public final class NpcHireScreen {
                 layout.alignItems(AlignItems.CENTER);
                 layout.justifyContent(AlignContent.CENTER);
             });
-            confirmRegion.addChild(confirmButton);
             root.addChild(confirmRegion);
 
+            root.addChild(RecipeBookSearchUi.frameElement(regions.searchRegion().left(), regions.searchRegion().top()));
+            HireUiController controller = new HireUiController(packet, regions, grid, statusSlot, cardRegion, infoRegion, pagerRegion, confirmRegion);
+            root.addChild(RecipeBookSearchUi.createField(regions.searchRegion().left() + RecipeBookSearchUi.TEXT_OFFSET_X,
+                    regions.searchRegion().top() + RecipeBookSearchUi.TEXT_OFFSET_Y, searchText, controller::onSearchChanged));
+            controller.refresh();
             return new ModularUI(SimuKraftUiTheme.createUi(root)).shouldCloseOnEsc(true).shouldCloseOnKeyInventory(false);
         } catch (Exception exception) {
             SimuKraft.LOGGER.error("Simukraft: Failed to build hire UI sourceType={} role={} page={} selectedNpcId={}",
@@ -237,7 +177,7 @@ public final class NpcHireScreen {
         }
     }
 
-    private static UIElement candidateCard(NpcHireListResponsePacket packet, NpcHireListResponsePacket.HireCandidate candidate, int width, int height) {
+    private static UIElement candidateCard(NpcHireListResponsePacket packet, NpcHireListResponsePacket.HireCandidate candidate, int width, int height, Runnable refreshAction) {
         try {
             boolean selected = candidate.citizenId().equals(selectedNpcId);
             int buttonInset = 2;
@@ -263,7 +203,7 @@ public final class NpcHireScreen {
             card.addClass("simukraft_card_button");
             card.setOnClick(event -> {
                 selectedNpcId = candidate.citizenId();
-                reopen();
+                refreshAction.run();
             });
             card.addChild(SimuKraftUiTheme.createDecorationLayer(6, 7, buttonWidth - 12, buttonHeight - 14, "simukraft_card_content_panel"));
             card.addChild(SimuKraftUiTheme.createDecorationLayer(6, 8, HEAD_SIZE + 4, HEAD_SIZE + 4, "simukraft_card_slot"));
@@ -368,15 +308,24 @@ public final class NpcHireScreen {
 
     private static RegionMetrics resolveRegions(int screenWidth, int screenHeight) {
         RegionBox titleRegion = relativeBox(screenWidth, screenHeight, TITLE_LEFT_RATIO, TITLE_TOP_RATIO, TITLE_WIDTH_RATIO, TITLE_HEIGHT_RATIO);
-        RegionBox rawCardRegion = relativeBox(screenWidth, screenHeight, CARD_LEFT_RATIO, CARD_TOP_RATIO, CARD_WIDTH_RATIO, CARD_HEIGHT_RATIO);
         RegionBox pagerRegion = relativeBox(screenWidth, screenHeight, PAGER_LEFT_RATIO, PAGER_TOP_RATIO, PAGER_WIDTH_RATIO, PAGER_HEIGHT_RATIO);
         RegionBox confirmRegion = relativeBox(screenWidth, screenHeight, CONFIRM_LEFT_RATIO, CONFIRM_TOP_RATIO, CONFIRM_WIDTH_RATIO, CONFIRM_HEIGHT_RATIO);
+        int searchTop = clamp(Math.max(titleRegion.bottom() + 4, Math.round(screenHeight * 0.155F)), 0,
+                Math.max(0, pagerRegion.top() - RecipeBookSearchUi.FRAME_HEIGHT - MIN_CARD_HEIGHT - 12));
+        RegionBox searchRegion = new RegionBox(
+                clamp((screenWidth - RecipeBookSearchUi.FRAME_WIDTH) / 2, 0, Math.max(0, screenWidth - RecipeBookSearchUi.FRAME_WIDTH)),
+                searchTop,
+                Math.min(RecipeBookSearchUi.FRAME_WIDTH, screenWidth),
+                RecipeBookSearchUi.FRAME_HEIGHT
+        );
+        RegionBox rawCardRegion = relativeBox(screenWidth, screenHeight, CARD_LEFT_RATIO, CARD_TOP_RATIO, CARD_WIDTH_RATIO, CARD_HEIGHT_RATIO);
+        int cardTop = clamp(Math.max(rawCardRegion.top(), searchRegion.bottom() + 6), 0, Math.max(0, pagerRegion.top() - MIN_CARD_HEIGHT - 4));
         int cardBottomLimit = Math.max(rawCardRegion.top() + MIN_CARD_HEIGHT, Math.min(rawCardRegion.bottom(), pagerRegion.top() - 4));
         RegionBox cardRegion = new RegionBox(
                 rawCardRegion.left(),
-                rawCardRegion.top(),
+                cardTop,
                 rawCardRegion.width(),
-                Math.max(MIN_CARD_HEIGHT, cardBottomLimit - rawCardRegion.top())
+                Math.max(MIN_CARD_HEIGHT, cardBottomLimit - cardTop)
         );
         int selectedInfoHeight = Math.max(16, Math.round(screenHeight * SELECTED_INFO_HEIGHT_RATIO));
         RegionBox selectedInfoRegion = new RegionBox(
@@ -387,6 +336,7 @@ public final class NpcHireScreen {
         );
         return new RegionMetrics(
                 titleRegion,
+                searchRegion,
                 cardRegion,
                 selectedInfoRegion,
                 pagerRegion,
@@ -484,10 +434,176 @@ public final class NpcHireScreen {
         return Math.max(1, (int) Math.ceil(Math.max(1, candidates.size()) / (double) Math.max(1, perPage)));
     }
 
+    private static List<NpcHireListResponsePacket.HireCandidate> filteredCandidates(List<NpcHireListResponsePacket.HireCandidate> candidates) {
+        String query = normalizedSearchText();
+        if (query.isBlank()) {
+            return candidates;
+        }
+        return candidates.stream()
+                .filter(candidate -> matchesSearch(candidate, query))
+                .toList();
+    }
+
+    private static boolean matchesSearch(NpcHireListResponsePacket.HireCandidate candidate, String query) {
+        return containsSearch(candidate.name(), query)
+                || containsSearch(candidate.gender(), query)
+                || containsSearch(Component.translatable("gui.npc.gender." + candidate.gender()).getString(), query)
+                || containsSearch(String.valueOf(candidate.age()), query)
+                || containsSearch(String.valueOf((int) Math.ceil(candidate.health())), query)
+                || containsSearch(String.valueOf((int) Math.ceil(candidate.hunger())), query)
+                || containsSearch(candidate.currentJob(), query)
+                || containsSearch(Component.translatable(CityJobType.fromName(candidate.currentJob()).translationKey()).getString(), query)
+                || containsSearch(candidate.workStatus(), query)
+                || containsSearch(Component.translatable("work_status." + candidate.workStatus()).getString(), query)
+                || containsSearch("lv " + candidate.skillLevel(), query)
+                || containsSearch(String.valueOf(candidate.skillLevel()), query)
+                || containsSearch(candidate.skinPath(), query);
+    }
+
+    private static boolean containsSearch(String text, String query) {
+        return text != null && text.toLowerCase(Locale.ROOT).contains(query);
+    }
+
+    private static String normalizedSearchText() {
+        return searchText == null ? "" : searchText.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static final class HireUiController {
+        private final NpcHireListResponsePacket packet;
+        private final RegionMetrics regions;
+        private final GridMetrics grid;
+        private final UIElement statusSlot;
+        private final UIElement cardRegion;
+        private final UIElement infoRegion;
+        private final UIElement pagerRegion;
+        private final UIElement confirmRegion;
+
+        private HireUiController(NpcHireListResponsePacket packet, RegionMetrics regions, GridMetrics grid, UIElement statusSlot,
+                                 UIElement cardRegion, UIElement infoRegion, UIElement pagerRegion, UIElement confirmRegion) {
+            this.packet = packet;
+            this.regions = regions;
+            this.grid = grid;
+            this.statusSlot = statusSlot;
+            this.cardRegion = cardRegion;
+            this.infoRegion = infoRegion;
+            this.pagerRegion = pagerRegion;
+            this.confirmRegion = confirmRegion;
+        }
+
+        /** onSearchChanged: 搜索变化时只刷新列表区域，避免输入框丢焦点。 */
+        private void onSearchChanged(String text) {
+            searchText = text == null ? "" : text;
+            currentPage = 0;
+            selectedNpcId = null;
+            refresh();
+        }
+
+        /** refresh: 根据当前搜索、分页和选中状态重建可变区域。 */
+        private void refresh() {
+            List<NpcHireListResponsePacket.HireCandidate> filteredCandidates = filteredCandidates(packet.candidates());
+            int pageCount = totalPages(filteredCandidates, grid.perPage());
+            currentPage = Math.max(0, Math.min(currentPage, pageCount - 1));
+            refreshStatus(filteredCandidates, pageCount);
+            refreshCards(filteredCandidates);
+            refreshSelectedInfo();
+            refreshPager(pageCount);
+            refreshConfirm();
+        }
+
+        private void refreshStatus(List<NpcHireListResponsePacket.HireCandidate> filteredCandidates, int pageCount) {
+            statusSlot.clearAllChildren();
+            Component status = packet.candidates().isEmpty()
+                    ? Component.translatable("message.simukraft.no_idle_npcs")
+                    : Component.translatable("gui.select_npc.title", filteredCandidates.size(), currentPage + 1, pageCount);
+            int statusColor = packet.candidates().isEmpty()
+                    ? SimuKraftUiTheme.TEXT_ERROR_COLOR
+                    : filteredCandidates.isEmpty() ? SimuKraftUiTheme.TEXT_WARNING_COLOR : SimuKraftUiTheme.TEXT_SUCCESS_COLOR;
+            statusSlot.addChild(textElement(status, regions.titleRegion().width(), statusColor, TextTexture.TextType.NORMAL).layout(layout -> {
+                layout.widthPercent(100);
+                layout.height(18);
+            }));
+        }
+
+        private void refreshCards(List<NpcHireListResponsePacket.HireCandidate> filteredCandidates) {
+            cardRegion.clearAllChildren();
+            List<NpcHireListResponsePacket.HireCandidate> pageCandidates = pageCandidates(filteredCandidates, currentPage, grid.perPage());
+            for (NpcHireListResponsePacket.HireCandidate candidate : pageCandidates) {
+                cardRegion.addChild(candidateCard(packet, candidate, grid.cardWidth(), grid.cardHeight(), this::refresh));
+            }
+        }
+
+        private void refreshSelectedInfo() {
+            infoRegion.clearAllChildren();
+            if (selectedNpcId == null) {
+                return;
+            }
+            String selectedName = selectedNpcName(packet.candidates(), selectedNpcId);
+            infoRegion.addChild(textElement(Component.translatable("gui.select_npc.selected", selectedName),
+                    regions.selectedInfoRegion().width(), SimuKraftUiTheme.TEXT_WARNING_COLOR, TextTexture.TextType.NORMAL).layout(layout -> {
+                layout.widthPercent(100);
+                layout.height(12);
+            }));
+        }
+
+        private void refreshPager(int pageCount) {
+            pagerRegion.clearAllChildren();
+            Button prevButton = new Button();
+            prevButton.setText(Component.translatable("gui.pagination.previous"));
+            layoutButtonInRegion(prevButton, regions.pagerRegion(), 0.25F, 0.82F);
+            if (currentPage > 0) {
+                prevButton.setOnClick(event -> {
+                    currentPage--;
+                    refresh();
+                });
+            } else {
+                prevButton.setActive(false);
+            }
+
+            UIElement pageLabel = textElement(Component.translatable("gui.pagination.info", currentPage + 1, pageCount),
+                    regions.pagerRegion().width() / 3, SimuKraftUiTheme.TEXT_SECONDARY_COLOR, TextTexture.TextType.NORMAL);
+            pageLabel.layout(layout -> {
+                layout.width(Math.max(80, regions.pagerRegion().width() / 3));
+                layout.height(14);
+            });
+
+            Button nextButton = new Button();
+            nextButton.setText(Component.translatable("gui.pagination.next"));
+            layoutButtonInRegion(nextButton, regions.pagerRegion(), 0.25F, 0.82F);
+            if (currentPage < pageCount - 1) {
+                nextButton.setOnClick(event -> {
+                    currentPage++;
+                    refresh();
+                });
+            } else {
+                nextButton.setActive(false);
+            }
+            pagerRegion.addChild(prevButton);
+            pagerRegion.addChild(pageLabel);
+            pagerRegion.addChild(nextButton);
+        }
+
+        private void refreshConfirm() {
+            confirmRegion.clearAllChildren();
+            Button confirmButton = new Button();
+            confirmButton.setText(Component.translatable("gui.button.hire"));
+            layoutButtonInRegion(confirmButton, regions.confirmRegion(), 0.88F, 0.82F);
+            if (selectedNpcId != null) {
+                confirmButton.setOnClick(event -> {
+                    PacketDistributor.sendToServer(new NpcHireAssignPacket(packet.sourcePos(), packet.sourceType(), packet.role(), selectedNpcId));
+                    returnToSource(packet.sourceType(), packet.sourcePos());
+                });
+            } else {
+                confirmButton.setActive(false);
+            }
+            confirmRegion.addChild(confirmButton);
+        }
+    }
+
     private record GridMetrics(int columns, int rows, int perPage, int cardWidth, int cardHeight) {
     }
 
     private record RegionMetrics(RegionBox titleRegion,
+                                 RegionBox searchRegion,
                                  RegionBox cardRegion,
                                  RegionBox selectedInfoRegion,
                                  RegionBox pagerRegion,

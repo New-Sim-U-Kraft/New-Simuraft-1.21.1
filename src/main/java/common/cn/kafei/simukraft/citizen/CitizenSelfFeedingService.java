@@ -2,7 +2,6 @@ package common.cn.kafei.simukraft.citizen;
 
 import common.cn.kafei.simukraft.commercial.CommercialFoodMarketService;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
-import common.cn.kafei.simukraft.job.CityJobType;
 import common.cn.kafei.simukraft.path.CitizenNavigationService;
 import common.cn.kafei.simukraft.path.MovementIntent;
 import common.cn.kafei.simukraft.util.SaveScopedCacheKey;
@@ -69,6 +68,18 @@ public final class CitizenSelfFeedingService {
         return level != null && citizenId != null && runtime(level).active.containsKey(citizenId);
     }
 
+    /** effectiveStatusLabel: 买饭活跃时返回运行时覆盖状态，否则返回主职业状态。 */
+    public static String effectiveStatusLabel(ServerLevel level, UUID citizenId, String fallbackStatusLabel) {
+        if (level == null || citizenId == null) {
+            return fallbackStatusLabel != null ? fallbackStatusLabel : "";
+        }
+        FeedingRuntime feeding = runtime(level).active.get(citizenId);
+        if (feeding != null && isSelfFeedingStatus(feeding.overlayStatusLabel)) {
+            return feeding.overlayStatusLabel;
+        }
+        return fallbackStatusLabel != null ? fallbackStatusLabel : "";
+    }
+
     /** clearServerCaches: 清理指定存档的买饭运行时缓存。 */
     public static void clearServerCaches(MinecraftServer server) {
         String serverKey = SaveScopedCacheKey.serverKey(server).toLowerCase(Locale.ROOT);
@@ -99,7 +110,7 @@ public final class CitizenSelfFeedingService {
             return;
         }
         CommercialFoodMarketService.PurchasePlan plan = CommercialFoodMarketService.findPurchasePlan(level, citizen, entity);
-        FeedingRuntime feeding = new FeedingRuntime(citizen.workStatusType(), restorableStatusLabel(citizen.statusLabel()),
+        FeedingRuntime feeding = new FeedingRuntime(restorableStatusLabel(citizen.statusLabel()),
                 restorableWorkNeedDetail(citizen.workNeedDetail()));
         runtime.active.put(citizen.uuid(), feeding);
         if (plan == null) {
@@ -202,10 +213,7 @@ public final class CitizenSelfFeedingService {
         runtime(level).active.remove(citizen.uuid());
         runtime(level).cooldowns.put(citizen.uuid(), level.getGameTime() + DONE_COOLDOWN_TICKS);
         CitizenJobVisualService.clearMainHandOverride(citizen.uuid());
-        citizen.setWorkStatus(feeding.previousWorkStatus != null ? feeding.previousWorkStatus : fallbackWorkStatus(citizen));
-        citizen.setStatusLabel(restorableStatusLabel(feeding.previousStatusLabel));
-        citizen.setWorkNeedDetail(restorableWorkNeedDetail(feeding.previousWorkNeedDetail));
-        manager.saveCitizenNow(citizen.uuid());
+        restoreOwnOverlay(level, manager, citizen, feeding);
         CitizenEntity entity = CitizenTeleportService.findCitizenEntity(level, citizen.uuid());
         if (entity != null) {
             manager.syncEntity(entity);
@@ -217,12 +225,16 @@ public final class CitizenSelfFeedingService {
 
     private static void requestMove(ServerLevel level, UUID citizenId, CommercialFoodMarketService.PurchasePlan plan) {
         if (plan != null) {
-            CitizenNavigationService.requestMove(level, citizenId, Vec3.atBottomCenterOf(plan.boxPos().above()), MovementIntent.WORK);
+            CitizenNavigationService.requestMove(level, citizenId, Vec3.atBottomCenterOf(plan.boxPos().above()), MovementIntent.SELF_FEEDING);
         }
     }
 
     private static void setStatus(ServerLevel level, CitizenManager manager, CitizenData citizen, String statusLabel, String detailKey) {
         String safeDetail = detailKey != null && !detailKey.isBlank() ? FOOD_NEED_PREFIX + detailKey : "";
+        FeedingRuntime feeding = runtime(level).active.get(citizen.uuid());
+        if (feeding != null) {
+            feeding.overlayStatusLabel = statusLabel;
+        }
         if (statusLabel.equals(citizen.statusLabel()) && safeDetail.equals(citizen.workNeedDetail())) {
             return;
         }
@@ -235,12 +247,6 @@ public final class CitizenSelfFeedingService {
         }
     }
 
-    private static CitizenWorkStatus fallbackWorkStatus(CitizenData citizen) {
-        return citizen.workplaceId() != null && citizen.jobType() != CityJobType.UNEMPLOYED
-                ? CitizenWorkStatus.WORKING
-                : CitizenWorkStatus.IDLE;
-    }
-
     private static void cancelAllForRest(ServerLevel level, LevelRuntime runtime) {
         CitizenManager manager = CitizenManager.get(level);
         runtime.active.forEach((citizenId, feeding) -> CitizenService.findCitizen(level, citizenId)
@@ -250,6 +256,7 @@ public final class CitizenSelfFeedingService {
                         runtime.cooldowns.put(citizenId, level.getGameTime() + DONE_COOLDOWN_TICKS);
                         CitizenNavigationService.stop(level, citizenId);
                         CitizenJobVisualService.clearMainHandOverride(citizenId);
+                        restoreOwnOverlay(level, manager, citizen, feeding);
                     } else {
                         finish(level, manager, citizen, feeding, false);
                     }
@@ -272,6 +279,22 @@ public final class CitizenSelfFeedingService {
             manager.syncEntity(entity);
         }
         return true;
+    }
+
+    /** restoreOwnOverlay: 流程结束时只撤销买饭覆盖层，不回滚主职业状态。 */
+    private static void restoreOwnOverlay(ServerLevel level, CitizenManager manager, CitizenData citizen, FeedingRuntime feeding) {
+        boolean changed = false;
+        if (isSelfFeedingStatus(citizen.statusLabel())) {
+            citizen.setStatusLabel(restorableStatusLabel(feeding.previousStatusLabel));
+            changed = true;
+        }
+        if (isFoodNeedDetail(citizen.workNeedDetail())) {
+            citizen.setWorkNeedDetail(restorableWorkNeedDetail(feeding.previousWorkNeedDetail));
+            changed = true;
+        }
+        if (changed) {
+            manager.saveCitizenNow(citizen.uuid());
+        }
     }
 
     /** restorableStatusLabel: 自喂食状态是临时状态，不能作为完成后的恢复目标。 */
@@ -297,6 +320,11 @@ public final class CitizenSelfFeedingService {
         return workNeedDetail != null && workNeedDetail.startsWith(FOOD_NEED_PREFIX);
     }
 
+    /** isSelfFeedingStatusLabel: 暴露给显示层判断买饭临时状态是否应覆盖主状态。 */
+    public static boolean isSelfFeedingStatusLabel(String statusLabel) {
+        return isSelfFeedingStatus(statusLabel);
+    }
+
     private static LevelRuntime runtime(ServerLevel level) {
         return RUNTIMES.computeIfAbsent(SaveScopedCacheKey.levelKey(level).toLowerCase(Locale.ROOT), ignored -> new LevelRuntime());
     }
@@ -313,15 +341,14 @@ public final class CitizenSelfFeedingService {
     }
 
     private static final class FeedingRuntime {
-        private final CitizenWorkStatus previousWorkStatus;
         private final String previousStatusLabel;
         private final String previousWorkNeedDetail;
         private Phase phase = Phase.STRIKE;
         private CommercialFoodMarketService.PurchasePlan plan;
+        private volatile String overlayStatusLabel = "";
         private long nextTick;
 
-        private FeedingRuntime(CitizenWorkStatus previousWorkStatus, String previousStatusLabel, String previousWorkNeedDetail) {
-            this.previousWorkStatus = previousWorkStatus;
+        private FeedingRuntime(String previousStatusLabel, String previousWorkNeedDetail) {
             this.previousStatusLabel = previousStatusLabel != null ? previousStatusLabel : "";
             this.previousWorkNeedDetail = previousWorkNeedDetail != null ? previousWorkNeedDetail : "";
         }

@@ -12,15 +12,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.tags.BlockTags;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.DoorBlock;
-import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.minecraft.world.level.gameevent.GameEvent;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -51,15 +46,12 @@ public final class CitizenNavigationService {
     private static final double TURN_DOT_THRESHOLD = 0.906D;
     private static final double STALLED_SOFT_SKIP_DISTANCE = 2.25D;
     private static final double ACTION_START_DISTANCE = 0.65D;
-    private static final double CLIMB_HORIZONTAL_ARRIVAL_DISTANCE = 0.72D;
-    private static final double CLIMB_VERTICAL_ARRIVAL_DISTANCE = 0.08D;
-    private static final double CLIMB_VERTICAL_PASS_DISTANCE = 0.35D;
+    private static final double CLIMB_VERTICAL_ARRIVAL_DISTANCE = 0.03D;
     private static final double CLIMB_VERTICAL_ASSIST_DISTANCE = 0.75D;
     private static final double CLIMB_VERTICAL_SPEED = 0.16D;
     private static final double CLIMB_VERTICAL_SPEED_FACTOR = 0.22D;
-    private static final double CLIMB_HEAD_CLEARANCE_INFLATE = 0.03D;
-    private static final double CLIMB_HEAD_CLEARANCE_HEIGHT = 0.56D;
-    private static final double CLIMB_HEAD_EXIT_PROBE_DISTANCE = 0.42D;
+    private static final double CLIMB_EXIT_DETACH_HORIZONTAL_SPEED = 0.09D;
+    private static final double CLIMB_EXIT_DROP_SPEED = -0.12D;
     private static final double CORNER_ARRIVAL_DISTANCE = 0.30D;
     private static final double SEGMENT_LOOKAHEAD_BLOCKS = 1.15D;
     private static final double CORNER_LOOKAHEAD_BLOCKS = 0.55D;
@@ -104,6 +96,11 @@ public final class CitizenNavigationService {
         }
 
         LevelRuntime runtime = runtime(level);
+        if (normalizedIntent == MovementIntent.SELF_FEEDING) {
+            clearLowerPriorityNavigation(level, runtime, citizenId, citizen);
+        } else if (normalizedIntent == MovementIntent.WORK && hasSelfFeedingNavigation(runtime, citizenId)) {
+            return false;
+        }
         ActiveNavigation active = runtime.active.get(citizenId);
         if (active != null && active.sameTarget(target)) {
             return true;
@@ -134,6 +131,42 @@ public final class CitizenNavigationService {
             runtime.queue.offer(citizenId);
         }
         return true;
+    }
+
+    /** hasSelfFeedingNavigation: 判断买饭导航是否正在占用该 NPC，避免普通工作移动抢占。 */
+    private static boolean hasSelfFeedingNavigation(LevelRuntime runtime, UUID citizenId) {
+        ActiveNavigation active = runtime.active.get(citizenId);
+        if (active != null && active.intent == MovementIntent.SELF_FEEDING) {
+            return true;
+        }
+        RunningRequest running = runtime.pending.get(citizenId);
+        if (running != null && running.cacheKey().intent() == MovementIntent.SELF_FEEDING) {
+            return true;
+        }
+        PathRequest queued = runtime.latestRequests.get(citizenId);
+        return queued != null && queued.intent() == MovementIntent.SELF_FEEDING;
+    }
+
+    /** clearLowerPriorityNavigation: 买饭开始时清掉旧的普通工作导航，防止两套状态轮流改目标。 */
+    private static void clearLowerPriorityNavigation(ServerLevel level, LevelRuntime runtime, UUID citizenId, CitizenEntity citizen) {
+        ActiveNavigation active = runtime.active.get(citizenId);
+        if (active != null && active.intent != MovementIntent.SELF_FEEDING) {
+            runtime.active.remove(citizenId);
+            citizen.getNavigation().stop();
+            PathCrowdCoordinator.clear(level, citizenId);
+        }
+        RunningRequest running = runtime.pending.get(citizenId);
+        if (running != null && running.cacheKey().intent() != MovementIntent.SELF_FEEDING) {
+            RunningRequest removed = runtime.pending.remove(citizenId);
+            if (removed != null) {
+                removed.future().cancel(false);
+            }
+        }
+        PathRequest queued = runtime.latestRequests.get(citizenId);
+        if (queued != null && queued.intent() != MovementIntent.SELF_FEEDING) {
+            runtime.latestRequests.remove(citizenId);
+            runtime.queuedCitizenIds.remove(citizenId);
+        }
     }
 
     public static void stop(ServerLevel level, UUID citizenId) {
@@ -278,7 +311,7 @@ public final class CitizenNavigationService {
         LevelRuntime runtime = runtime(level);
         applyCompletedPaths(level, runtime);
         tickActivePaths(level, runtime);
-        processOpenedBarriers(level, runtime);
+        processOpenedDoors(level, runtime);
         processQueuedRequests(level, runtime);
         if (level.getGameTime() % 200L == 0L) {
             runtime.pathCache.cleanup(level.getGameTime());
@@ -553,11 +586,11 @@ public final class CitizenNavigationService {
     }
 
     /**
-     * Opens the wooden door or fence gate the citizen is arriving at, recording it so it can be
-     * closed once the citizen has cleared the opening. Only barriers this follower actually flips
-     * from closed to open are tracked; a barrier already open is left as the world set it.
+     * Opens the wooden door the citizen is arriving at, recording it so it can be closed once the
+     * citizen has cleared the opening. Only doors this follower actually flips from closed to open
+     * are tracked; a door already open is left as the world set it.
      */
-    private static void tryOpenBarrier(ServerLevel level, CitizenEntity citizen, PathWaypoint waypoint, LevelRuntime runtime) {
+    private static void tryOpenWoodenDoor(ServerLevel level, CitizenEntity citizen, PathWaypoint waypoint, LevelRuntime runtime) {
         if (level == null || citizen == null || waypoint == null) {
             return;
         }
@@ -567,56 +600,48 @@ public final class CitizenNavigationService {
                 BlockState state = level.getBlockState(doorPos);
                 if (state.getBlock() instanceof DoorBlock doorBlock && isClosedWoodenLowerDoor(state)) {
                     doorBlock.setOpen(citizen, level, state, doorPos, true);
-                    trackOpenedBarrier(runtime, level, citizen, doorPos);
+                    trackOpenedDoor(runtime, level, citizen, doorPos);
                 }
             }
             return;
         }
-        BlockPos gatePos = waypoint.blockPos();
-        if (citizen.position().distanceToSqr(Vec3.atCenterOf(gatePos)) <= DOOR_INTERACT_RANGE_SQR) {
-            BlockState state = level.getBlockState(gatePos);
-            if (isClosedWoodenFenceGate(state)) {
-                setFenceGateOpen(level, citizen, gatePos, state, true);
-                trackOpenedBarrier(runtime, level, citizen, gatePos);
-            }
-        }
     }
 
-    private static void trackOpenedBarrier(LevelRuntime runtime, ServerLevel level, CitizenEntity citizen, BlockPos pos) {
-        if (runtime.openedBarriers.size() >= MAX_TRACKED_DOORS) {
-            evictOldestBarrier(runtime);
+    private static void trackOpenedDoor(LevelRuntime runtime, ServerLevel level, CitizenEntity citizen, BlockPos pos) {
+        if (runtime.openedDoors.size() >= MAX_TRACKED_DOORS) {
+            evictOldestDoor(runtime);
         }
-        runtime.openedBarriers.put(pos.asLong(), new OpenedBarrier(citizen.getUUID(), level.getGameTime()));
+        runtime.openedDoors.put(pos.asLong(), new OpenedDoor(citizen.getUUID(), level.getGameTime()));
     }
 
-    private static void evictOldestBarrier(LevelRuntime runtime) {
+    private static void evictOldestDoor(LevelRuntime runtime) {
         Long oldestKey = null;
         long oldestAt = Long.MAX_VALUE;
-        for (Map.Entry<Long, OpenedBarrier> entry : runtime.openedBarriers.entrySet()) {
+        for (Map.Entry<Long, OpenedDoor> entry : runtime.openedDoors.entrySet()) {
             if (entry.getValue().openedAt() < oldestAt) {
                 oldestAt = entry.getValue().openedAt();
                 oldestKey = entry.getKey();
             }
         }
         if (oldestKey != null) {
-            runtime.openedBarriers.remove(oldestKey);
+            runtime.openedDoors.remove(oldestKey);
         }
     }
 
     /**
-     * Closes every tracked door/gate whose opener has cleared the opening (or is gone), re-reading
-     * the live block first so a barrier a player removed or re-closed is never forced and so the
-     * door is not slammed on another citizen still in the doorway.
+     * Closes every tracked wooden door whose opener has cleared the opening (or is gone),
+     * re-reading the live block first so a door a player removed or re-closed is never forced and
+     * so the door is not slammed on another citizen still in the doorway.
      */
-    private static void processOpenedBarriers(ServerLevel level, LevelRuntime runtime) {
-        if (runtime.openedBarriers.isEmpty()) {
+    private static void processOpenedDoors(ServerLevel level, LevelRuntime runtime) {
+        if (runtime.openedDoors.isEmpty()) {
             return;
         }
-        for (Iterator<Map.Entry<Long, OpenedBarrier>> iterator = runtime.openedBarriers.entrySet().iterator(); iterator.hasNext();) {
-            Map.Entry<Long, OpenedBarrier> entry = iterator.next();
+        for (Iterator<Map.Entry<Long, OpenedDoor>> iterator = runtime.openedDoors.entrySet().iterator(); iterator.hasNext();) {
+            Map.Entry<Long, OpenedDoor> entry = iterator.next();
             BlockPos pos = BlockPos.of(entry.getKey());
             BlockState state = level.getBlockState(pos);
-            if (!isCloseableBarrier(state)) {
+            if (!isCloseableWoodenDoor(state)) {
                 iterator.remove();
                 continue;
             }
@@ -629,37 +654,19 @@ public final class CitizenNavigationService {
             if (isOtherCitizenInDoorway(level, runtime, pos, entry.getValue().citizenId())) {
                 continue;
             }
-            closeBarrier(level, opener, pos, state);
+            closeWoodenDoor(level, opener, pos, state);
             iterator.remove();
         }
     }
 
-    private static boolean isCloseableBarrier(BlockState state) {
-        return isOpenWoodenLowerDoor(state) || isOpenWoodenFenceGate(state);
+    private static boolean isCloseableWoodenDoor(BlockState state) {
+        return isOpenWoodenLowerDoor(state);
     }
 
-    private static void closeBarrier(ServerLevel level, CitizenEntity citizen, BlockPos pos, BlockState state) {
+    private static void closeWoodenDoor(ServerLevel level, CitizenEntity citizen, BlockPos pos, BlockState state) {
         if (state.getBlock() instanceof DoorBlock doorBlock && isOpenWoodenLowerDoor(state)) {
             doorBlock.setOpen(citizen, level, state, pos, false);
-        } else if (isOpenWoodenFenceGate(state)) {
-            setFenceGateOpen(level, citizen, pos, state, false);
         }
-    }
-
-    /**
-     * Opens or closes a fence gate. {@link FenceGateBlock} exposes no {@code setOpen}, so this
-     * mirrors {@code FenceGateBlock.useWithoutItem}: flip the OPEN state, play the gate's sound and
-     * emit the matching game event.
-     */
-    private static void setFenceGateOpen(ServerLevel level, Entity source, BlockPos pos, BlockState state, boolean open) {
-        if (!(state.getBlock() instanceof FenceGateBlock gate) || !state.hasProperty(FenceGateBlock.OPEN)
-                || state.getValue(FenceGateBlock.OPEN) == open) {
-            return;
-        }
-        level.setBlock(pos, state.setValue(FenceGateBlock.OPEN, open), 10);
-        level.playSound(null, pos, open ? gate.openSound : gate.closeSound, SoundSource.BLOCKS,
-                1.0F, level.getRandom().nextFloat() * 0.1F + 0.9F);
-        level.gameEvent(source, open ? GameEvent.BLOCK_OPEN : GameEvent.BLOCK_CLOSE, pos);
     }
 
     private static boolean isOtherCitizenInDoorway(ServerLevel level, LevelRuntime runtime, BlockPos pos, UUID excludeId) {
@@ -682,22 +689,8 @@ public final class CitizenNavigationService {
         return dx * dx + dz * dz;
     }
 
-    private static boolean isClosedWoodenFenceGate(BlockState state) {
-        return state.getBlock() instanceof FenceGateBlock
-                && state.hasProperty(FenceGateBlock.OPEN)
-                && !state.getValue(FenceGateBlock.OPEN)
-                && !isPoweredBarrier(state);
-    }
-
-    private static boolean isOpenWoodenFenceGate(BlockState state) {
-        return state.getBlock() instanceof FenceGateBlock
-                && state.hasProperty(FenceGateBlock.OPEN)
-                && state.getValue(FenceGateBlock.OPEN)
-                && !isPoweredBarrier(state);
-    }
-
     private static boolean isOpenWoodenLowerDoor(BlockState state) {
-        return state.is(BlockTags.WOODEN_DOORS)
+        return DoorBlock.isWoodenDoor(state)
                 && state.getBlock() instanceof DoorBlock
                 && state.hasProperty(DoorBlock.OPEN)
                 && state.getValue(DoorBlock.OPEN)
@@ -706,7 +699,7 @@ public final class CitizenNavigationService {
                 && !isPoweredBarrier(state);
     }
 
-    // A barrier held by redstone must not be fought: closing it would just snap back open.
+    // A redstone-held door must not be fought: closing it would just snap back open.
     private static boolean isPoweredBarrier(BlockState state) {
         return state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED)
                 && state.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.POWERED);
@@ -727,7 +720,7 @@ public final class CitizenNavigationService {
     }
 
     private static boolean isClosedWoodenLowerDoor(BlockState state) {
-        return state.is(BlockTags.WOODEN_DOORS)
+        return DoorBlock.isWoodenDoor(state)
                 && state.getBlock() instanceof DoorBlock
                 && state.hasProperty(DoorBlock.OPEN)
                 && !state.getValue(DoorBlock.OPEN)
@@ -736,7 +729,7 @@ public final class CitizenNavigationService {
     }
 
     private static boolean isWoodenDoorUpper(BlockState state) {
-        return state.is(BlockTags.WOODEN_DOORS)
+        return DoorBlock.isWoodenDoor(state)
                 && state.getBlock() instanceof DoorBlock
                 && state.hasProperty(DoorBlock.HALF)
                 && state.getValue(DoorBlock.HALF) == DoubleBlockHalf.UPPER;
@@ -769,7 +762,7 @@ public final class CitizenNavigationService {
         if (mode == MovementMode.RUN || intent == MovementIntent.RUN || intent == MovementIntent.RETURN_HOME) {
             return 1.2D;
         }
-        if (intent == MovementIntent.WORK) {
+        if (intent == MovementIntent.WORK || intent == MovementIntent.SELF_FEEDING) {
             return 1.0D;
         }
         return 0.85D;
@@ -789,7 +782,7 @@ public final class CitizenNavigationService {
         private final ConcurrentMap<UUID, ActiveNavigation> active = new ConcurrentHashMap<>();
         private final ConcurrentMap<UUID, Long> cooldowns = new ConcurrentHashMap<>();
         private final ConcurrentMap<UUID, Long> blockedSince = new ConcurrentHashMap<>();
-        private final ConcurrentMap<Long, OpenedBarrier> openedBarriers = new ConcurrentHashMap<>();
+        private final ConcurrentMap<Long, OpenedDoor> openedDoors = new ConcurrentHashMap<>();
         private final PathResultCache pathCache = new PathResultCache();
         private final PathSnapshotCache snapshotCache = new PathSnapshotCache();
         private long loadedCitizenCountTick = Long.MIN_VALUE;
@@ -799,8 +792,8 @@ public final class CitizenNavigationService {
     private record RunningRequest(CompletableFuture<PathResult> future, PathCacheKey cacheKey) {
     }
 
-    /** A wooden door or fence gate a citizen opened, tracked so it can be closed once cleared. */
-    private record OpenedBarrier(UUID citizenId, long openedAt) {
+    /** A wooden door a citizen opened, tracked so it can be closed once cleared. */
+    private record OpenedDoor(UUID citizenId, long openedAt) {
     }
 
     private record DebugPathEntry(UUID citizenId, ActiveNavigation navigation, double distanceSqr) {
@@ -867,7 +860,18 @@ public final class CitizenNavigationService {
             PathWaypoint commandWaypoint = waypoint;
             Vec3 commandTarget = commandTarget(citizen.position(), waypointIndex, waypoint, commandWaypoint);
             MovementMode commandMode = commandMode(commandTarget, commandWaypoint);
-            tryOpenBarrier(level, citizen, waypoint, runtime);
+            tryOpenWoodenDoor(level, citizen, waypoint, runtime);
+            if (ClimbWaypointPolicy.isLandingAfterDescendingClimb(waypoints, waypointIndex)) {
+                if (shouldApplyClimbExitDetach(citizen, waypoint)) {
+                    Vec3 detachDirection = ClimbWaypointPolicy.landingDetachDirection(waypoints, waypointIndex,
+                            climbExitFallbackDirection(level, waypoints.get(waypointIndex - 1)));
+                    citizen.getMoveControl().setWantedPosition(citizen.getX(), citizen.getY(), citizen.getZ(), 0.0D);
+                    applyClimbExitDetach(citizen, detachDirection);
+                    stalledTicks = 0;
+                    lastDistance = distance;
+                    return ActiveTickResult.RUNNING;
+                }
+            }
             PathCrowdCoordinator.record(level, citizen.getUUID(), citizen.position(), commandTarget);
             boolean crowdYieldTimedOut = false;
             if (!isActionMode(waypoint.mode()) && PathCrowdCoordinator.shouldYield(level, citizen, commandTarget)) {
@@ -941,7 +945,10 @@ public final class CitizenNavigationService {
 
         private boolean shouldAdvanceWaypoint(CitizenEntity citizen, Vec3 position, int index, PathWaypoint waypoint) {
             if (waypoint.mode() == MovementMode.CLIMB) {
-                return isCloseToClimbWaypoint(position, index, waypoint) && canLeaveClimbSideways(citizen, index);
+                return ClimbWaypointPolicy.isReached(position, waypoints, index);
+            }
+            if (ClimbWaypointPolicy.isLandingAfterClimb(waypoints, index)) {
+                return ClimbWaypointPolicy.isLandingReached(position, waypoints, index, citizen.onGround());
             }
             double arrivalDistance = arrivalDistance(index, waypoint.mode());
             if (position.distanceToSqr(waypoint.position()) <= arrivalDistance * arrivalDistance) {
@@ -962,6 +969,9 @@ public final class CitizenNavigationService {
         private Vec3 commandTarget(Vec3 position, int index, PathWaypoint waypoint, PathWaypoint commandWaypoint) {
             if (waypoint.mode() == MovementMode.JUMP && index > 0 && !jumpTriggered && !isNearActionStart(position, index)) {
                 return waypoints.get(index - 1).position();
+            }
+            if (waypoint.mode() == MovementMode.CLIMB) {
+                return ClimbWaypointPolicy.commandTarget(position, waypoints, index);
             }
             if (!isActionMode(waypoint.mode()) && index > 0) {
                 return segmentFollowTarget(position, index, waypoint);
@@ -1038,73 +1048,32 @@ public final class CitizenNavigationService {
             citizen.fallDistance = 0.0F;
         }
 
-        private boolean isCloseToClimbWaypoint(Vec3 position, int index, PathWaypoint waypoint) {
-            Vec3 waypointPosition = waypoint.position();
-            double dx = position.x - waypointPosition.x;
-            double dz = position.z - waypointPosition.z;
-            double horizontalSqr = dx * dx + dz * dz;
-            if (horizontalSqr > CLIMB_HORIZONTAL_ARRIVAL_DISTANCE * CLIMB_HORIZONTAL_ARRIVAL_DISTANCE) {
-                return false;
+        /** applyClimbExitDetach: 离梯下落阶段只轻微离墙并压低竖直速度，避免触发爬梯上行。 */
+        private void applyClimbExitDetach(CitizenEntity citizen, Vec3 direction) {
+            if (direction.lengthSqr() < 1.0E-4D) {
+                return;
             }
-            if (index <= 0) {
-                return Math.abs(position.y - waypointPosition.y) <= CLIMB_VERTICAL_PASS_DISTANCE;
-            }
-            double previousY = waypoints.get(index - 1).position().y;
-            if (waypointPosition.y > previousY + 0.25D) {
-                return position.y >= waypointPosition.y - CLIMB_VERTICAL_PASS_DISTANCE;
-            }
-            if (waypointPosition.y < previousY - 0.25D) {
-                return position.y <= waypointPosition.y + CLIMB_VERTICAL_PASS_DISTANCE;
-            }
-            return Math.abs(position.y - waypointPosition.y) <= CLIMB_VERTICAL_PASS_DISTANCE;
+            Vec3 motion = citizen.getDeltaMovement();
+            citizen.setDeltaMovement(
+                    direction.x * CLIMB_EXIT_DETACH_HORIZONTAL_SPEED,
+                    Math.min(motion.y, CLIMB_EXIT_DROP_SPEED),
+                    direction.z * CLIMB_EXIT_DETACH_HORIZONTAL_SPEED);
+            citizen.fallDistance = 0.0F;
         }
 
-        /** canLeaveClimbSideways: 梯子横向离开前必须确认头部碰撞空间已经清空。 */
-        private boolean canLeaveClimbSideways(CitizenEntity citizen, int index) {
-            if (index >= waypoints.size() - 1) {
-                return true;
-            }
-            PathWaypoint current = waypoints.get(index);
-            PathWaypoint next = waypoints.get(index + 1);
-            if (next.mode() == MovementMode.CLIMB || !hasHorizontalOffset(current.position(), next.position())) {
-                return true;
-            }
-            return hasClearHeadForLateralMove(citizen, current.position(), next.position());
+        /** shouldApplyClimbExitDetach: 只在未落地的陆地下梯阶段施加脱离力。 */
+        private boolean shouldApplyClimbExitDetach(CitizenEntity citizen, PathWaypoint waypoint) {
+            return waypoint.mode() != MovementMode.SWIM && !citizen.onGround();
         }
 
-        /** hasClearHeadForLateralMove: 检查 NPC 头部附近是否仍有碰撞方块。 */
-        private boolean hasClearHeadForLateralMove(CitizenEntity citizen, Vec3 from, Vec3 to) {
-            AABB body = citizen.getBoundingBox();
-            AABB head = new AABB(
-                    body.minX,
-                    Math.max(body.minY, body.maxY - CLIMB_HEAD_CLEARANCE_HEIGHT),
-                    body.minZ,
-                    body.maxX,
-                    body.maxY + 0.05D,
-                    body.maxZ
-            ).inflate(CLIMB_HEAD_CLEARANCE_INFLATE, 0.0D, CLIMB_HEAD_CLEARANCE_INFLATE);
-            if (!citizen.level().noCollision(head)) {
-                return false;
+        /** climbExitFallbackDirection: 路径没有水平出口时，真实梯子才按方块朝向兜底离墙。 */
+        private Vec3 climbExitFallbackDirection(ServerLevel level, PathWaypoint climbWaypoint) {
+            BlockState state = level.getBlockState(climbWaypoint.blockPos());
+            if (state.getBlock() instanceof LadderBlock && state.hasProperty(LadderBlock.FACING)) {
+                net.minecraft.core.Direction facing = state.getValue(LadderBlock.FACING);
+                return new Vec3(facing.getStepX(), 0.0D, facing.getStepZ());
             }
-            double dx = to.x - from.x;
-            double dz = to.z - from.z;
-            double horizontalLength = Math.sqrt(dx * dx + dz * dz);
-            if (horizontalLength < 0.0001D) {
-                return true;
-            }
-            AABB exitHead = head.move(
-                    dx / horizontalLength * CLIMB_HEAD_EXIT_PROBE_DISTANCE,
-                    0.0D,
-                    dz / horizontalLength * CLIMB_HEAD_EXIT_PROBE_DISTANCE
-            );
-            return citizen.level().noCollision(exitHead);
-        }
-
-        /** hasHorizontalOffset: 判断下一段是否会从梯子向四周横向移动。 */
-        private boolean hasHorizontalOffset(Vec3 from, Vec3 to) {
-            double dx = to.x - from.x;
-            double dz = to.z - from.z;
-            return dx * dx + dz * dz > 0.04D;
+            return Vec3.ZERO;
         }
 
         private boolean isNearActionStart(Vec3 position, int index) {

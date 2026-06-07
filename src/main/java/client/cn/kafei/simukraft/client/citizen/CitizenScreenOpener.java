@@ -15,6 +15,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.elements.ScrollerView;
 import com.lowdragmc.lowdraglib2.gui.ui.elements.Tab;
 import com.lowdragmc.lowdraglib2.gui.ui.data.ScrollerMode;
 import common.cn.kafei.simukraft.citizen.CitizenLevelService;
+import common.cn.kafei.simukraft.citizen.CitizenSelfFeedingService;
 import common.cn.kafei.simukraft.citizen.CitizenSkillSnapshot;
 import common.cn.kafei.simukraft.job.CityJobType;
 import common.cn.kafei.simukraft.network.citizen.info.CitizenInfoResponsePacket;
@@ -96,7 +97,9 @@ public final class CitizenScreenOpener {
         panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.menu.work")));
         panel.addChild(contentSpacerSmall());
         panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.work_status", workStatusText(packet))));
-        panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.work_detail", localizedOrLiteral(packet.statusLabel()))));
+        if (!usesStatusLabelAsPrimary(packet)) {
+            panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.work_detail", localizedOrLiteral(packet.statusLabel()))));
+        }
         panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.job", jobText(packet))));
         panel.addChild(line(Component.translatable("screen.simukraft.citizen_info.skill_level", skillText(packet))));
         return panel;
@@ -150,7 +153,15 @@ public final class CitizenScreenOpener {
     }
 
     private static String workStatusText(CitizenInfoResponsePacket packet) {
+        if (usesStatusLabelAsPrimary(packet)) {
+            return localizedOrLiteral(packet.statusLabel());
+        }
         return localizedOrLiteral(packet.workStatus());
+    }
+
+    // usesStatusLabelAsPrimary：买饭属于临时抢占状态，信息面板应把它显示为当前状态。
+    private static boolean usesStatusLabelAsPrimary(CitizenInfoResponsePacket packet) {
+        return packet != null && CitizenSelfFeedingService.isSelfFeedingStatusLabel(packet.statusLabel());
     }
 
     private static String jobText(CitizenInfoResponsePacket packet) {

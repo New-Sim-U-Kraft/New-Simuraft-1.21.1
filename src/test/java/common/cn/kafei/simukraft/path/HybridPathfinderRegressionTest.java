@@ -12,6 +12,15 @@ import java.util.Map;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +33,7 @@ import org.junit.jupiter.api.Test;
  * pit, a waterside, a step lip and a wall corner — and every assertion is an independent oracle that
  * fails on the pre-fix behaviour and passes on the fixed behaviour.
  */
+@SuppressWarnings("null")
 class HybridPathfinderRegressionTest {
     private static final ResourceLocation DIMENSION = ResourceLocation.fromNamespaceAndPath("minecraft", "overworld");
 
@@ -106,6 +116,84 @@ class HybridPathfinderRegressionTest {
         PathCase result = scene.path(0, 64, 0, 2, 64, 0);
         assertSuccess(result);
         assertNoActionMode(result);
+    }
+
+    /**
+     * Wooden door: the door cell must survive smoothing so the follower can open it on arrival.
+     */
+    @Test
+    void smoothingKeepsWoodenDoorWaypoint() {
+        Scene scene = new Scene();
+        scene.floor(0, 64, 0).woodenDoor(1, 64, 0).floor(2, 64, 0);
+        PathCase result = scene.path(0, 64, 0, 2, 64, 0);
+        assertSuccess(result);
+        assertTrue(containsBlock(result.result(), 1, 64, 0),
+                "smoothing dropped the wooden door waypoint; the follower would not open it");
+    }
+
+    /**
+     * Door policy: door-like blocks are passable only when their current state is already passable.
+     */
+    @Test
+    void doorLikePassageUsesCurrentPassableState() {
+        BlockState openWoodenDoor = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER)
+                .setValue(DoorBlock.OPEN, true);
+        BlockState closedWoodenDoor = openWoodenDoor.setValue(DoorBlock.OPEN, false);
+        BlockState openIronDoor = Blocks.IRON_DOOR.defaultBlockState()
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER)
+                .setValue(DoorBlock.OPEN, true);
+        BlockState closedIronDoor = openIronDoor.setValue(DoorBlock.OPEN, false);
+        BlockState openFenceGate = Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(FenceGateBlock.OPEN, true);
+        BlockState closedFenceGate = openFenceGate.setValue(FenceGateBlock.OPEN, false);
+        BlockState openTrapDoor = Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.OPEN, true);
+        BlockState closedTrapDoor = openTrapDoor.setValue(TrapDoorBlock.OPEN, false);
+
+        assertTrue(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(openWoodenDoor));
+        assertFalse(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedWoodenDoor));
+        assertTrue(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(openIronDoor));
+        assertFalse(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedIronDoor));
+        assertTrue(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(openFenceGate));
+        assertFalse(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedFenceGate));
+        assertTrue(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(openTrapDoor));
+        assertFalse(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedTrapDoor));
+    }
+
+    /**
+     * Door collision: a side-placed closed door can leave the occupied centre slice clear.
+     */
+    @Test
+    void doorLikePassageFallsBackToCollisionSlice() {
+        BlockState closedIronDoor = Blocks.IRON_DOOR.defaultBlockState()
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER)
+                .setValue(DoorBlock.OPEN, false);
+        VoxelShape doorShape = closedIronDoor.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+        BlockState closedFenceGate = Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(FenceGateBlock.OPEN, false);
+        VoxelShape gateShape = closedFenceGate.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+
+        assertTrue(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedIronDoor, doorShape, 0.0D, 1.0D),
+                "side-placed door collision was treated as blocking the centre slice");
+        assertFalse(PathSnapshotBuilder.isNpcPassableDoorLikeBlock(closedFenceGate, gateShape, 0.0D, 1.0D),
+                "closed fence gate should still block the centre slice");
+    }
+
+    /**
+     * Trapdoor collision: a closed top trapdoor above the head does not block the occupied slice.
+     */
+    @Test
+    void trapdoorPassageUsesOccupiedVerticalSlice() {
+        BlockState closedTopTrapDoor = Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.OPEN, false)
+                .setValue(TrapDoorBlock.HALF, Half.TOP);
+        VoxelShape shape = closedTopTrapDoor.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
+
+        assertTrue(PathSnapshotBuilder.clearsNpcBodySlice(shape, 0.0D, 0.8D),
+                "top trapdoor above the head was treated as a head blocker");
+        assertFalse(PathSnapshotBuilder.clearsNpcBodySlice(shape, 0.0D, 1.0D),
+                "top trapdoor in the feet block should still block the full foot slice");
     }
 
     /**
@@ -253,6 +341,41 @@ class HybridPathfinderRegressionTest {
                 "citizen never mounted the raised ladder rung");
     }
 
+    /**
+     * Ladder top exit: the top rung may stop one block below the upper floor, leaving only an air
+     * shaft at floor height. The pathfinder must still climb to the opening and step onto the floor.
+     */
+    @Test
+    void ladderAscentExitsWithoutFloorHeightRung() {
+        Scene scene = new Scene();
+        scene.floor(0, 63, 0).climb(1, 64, 0).passage(1, 65, 0).floor(2, 65, 0);
+        PathCase result = scene.path(0, 63, 0, 2, 65, 0);
+        assertSuccess(result);
+        assertNoDiagonalClimbElevation(result);
+        assertTrue(containsBlock(result.result(), 1, 65, 0),
+                "path never climbed through the air opening above the top rung");
+        assertEquals(MovementMode.WALK, lastWaypoint(result).mode(), "top ladder exit did not end on the upper floor");
+    }
+
+    /**
+     * Ladder top exit with sampled opening: live snapshots can classify the air block above the top
+     * rung as an ordinary body cell. It still needs a CLIMB edge from the rung into that opening.
+     */
+    @Test
+    void ladderAscentExitsThroughSampledOpeningWithoutFloorHeightRung() {
+        Scene scene = new Scene();
+        scene.floor(0, 63, 0).climb(1, 64, 0)
+                .cell(1, 65, 0, 65.0D, false, false, false, 1.0D)
+                .floor(2, 65, 0);
+        PathCase result = scene.path(0, 63, 0, 2, 65, 0);
+        assertSuccess(result);
+        assertNoDiagonalClimbElevation(result);
+        assertTrue(result.result().waypoints().stream()
+                        .anyMatch(waypoint -> waypoint.mode() == MovementMode.CLIMB && waypoint.blockPos().equals(new BlockPos(1, 65, 0))),
+                "sampled top opening was not reached by a climb edge");
+        assertEquals(MovementMode.WALK, lastWaypoint(result).mode(), "sampled top opening did not lead onto the upper floor");
+    }
+
     private static void assertSuccess(PathCase pathCase) {
         assertTrue(pathCase.result().success(), () -> "path failed: " + pathCase.result().reason());
         assertFalse(pathCase.result().waypoints().isEmpty(), "path produced no waypoints");
@@ -386,6 +509,10 @@ class HybridPathfinderRegressionTest {
 
         private Scene climb(int x, int y, int z) {
             return cell(x, y, z, y, false, true, false, 2.0D);
+        }
+
+        private Scene woodenDoor(int x, int y, int z) {
+            return cell(x, y, z, y, false, false, true, 3.2D);
         }
 
         private Scene cell(int x, int y, int z, double standY, boolean water, boolean climbable, boolean woodenDoor, double cost) {

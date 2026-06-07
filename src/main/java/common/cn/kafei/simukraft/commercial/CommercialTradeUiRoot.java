@@ -12,6 +12,7 @@ import com.lowdragmc.lowdraglib2.gui.ui.event.UIEvents;
 import com.lowdragmc.lowdraglib2.gui.ui.rendering.GUIContext;
 import common.cn.kafei.simukraft.network.commercial.CommercialTradeOpenResponsePacket;
 import common.cn.kafei.simukraft.network.commercial.CommercialTradePacket;
+import common.cn.kafei.simukraft.ui.RecipeBookSearchUi;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -31,7 +32,6 @@ import java.util.Objects;
 @SuppressWarnings("null")
 public final class CommercialTradeUiRoot extends UIElement {
     private static final ResourceLocation VILLAGER_LOCATION = ResourceLocation.withDefaultNamespace("textures/gui/container/villager.png");
-    private static final ResourceLocation RECIPE_BOOK_LOCATION = ResourceLocation.withDefaultNamespace("textures/gui/recipe_book.png");
     private static final ResourceLocation SCROLLER_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller");
     private static final ResourceLocation SCROLLER_DISABLED_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller_disabled");
     private static final ResourceLocation TRADE_ARROW_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/trade_arrow");
@@ -58,13 +58,8 @@ public final class CommercialTradeUiRoot extends UIElement {
     private static final int SCROLLER_HEIGHT = 22;
     private static final int SEARCH_FRAME_X = 5;
     private static final int SEARCH_FRAME_Y = 34;
-    private static final int SEARCH_FRAME_WIDTH = 95;
-    private static final int SEARCH_FRAME_TEXTURE_WIDTH = 89;
-    private static final int SEARCH_FRAME_HEIGHT = 17;
     private static final int SEARCH_TEXT_X = 25;
     private static final int SEARCH_TEXT_Y = 36;
-    private static final int SEARCH_TEXT_WIDTH = 72;
-    private static final int SEARCH_TEXT_HEIGHT = 13;
     private static final int COST_A_X = 136;
     private static final int COST_B_X = 162;
     private static final int RESULT_X = 220;
@@ -226,10 +221,10 @@ public final class CommercialTradeUiRoot extends UIElement {
 
     @OnlyIn(Dist.CLIENT)
     private void renderSearchBox(GUIContext guiContext, int left, int top) {
-        guiContext.graphics.blit(RECIPE_BOOK_LOCATION, left + SEARCH_FRAME_X, top + SEARCH_FRAME_Y, 0, 9.0F, 12.0F, SEARCH_FRAME_TEXTURE_WIDTH, SEARCH_FRAME_HEIGHT, 256, 256);
-        int textBorderRight = left + SEARCH_FRAME_X + SEARCH_FRAME_WIDTH - 1;
-        guiContext.graphics.fill(left + SEARCH_TEXT_X - 1, top + SEARCH_TEXT_Y - 1, textBorderRight, top + SEARCH_TEXT_Y + SEARCH_TEXT_HEIGHT + 1, 0xFF101010);
-        guiContext.graphics.fill(left + SEARCH_TEXT_X, top + SEARCH_TEXT_Y, textBorderRight - 1, top + SEARCH_TEXT_Y + SEARCH_TEXT_HEIGHT, 0xFF000000);
+        RecipeBookSearchUi.renderFrame(guiContext, left + SEARCH_FRAME_X, top + SEARCH_FRAME_Y,
+                RecipeBookSearchUi.FRAME_WIDTH, RecipeBookSearchUi.FRAME_TEXTURE_WIDTH, RecipeBookSearchUi.FRAME_HEIGHT,
+                RecipeBookSearchUi.TEXT_OFFSET_X, RecipeBookSearchUi.TEXT_OFFSET_Y,
+                RecipeBookSearchUi.TEXT_WIDTH, RecipeBookSearchUi.TEXT_HEIGHT);
     }
 
     @OnlyIn(Dist.CLIENT)
@@ -583,23 +578,7 @@ public final class CommercialTradeUiRoot extends UIElement {
     }
 
     private TextField searchField() {
-        TextField field = new TextField();
-        field.setAnyString();
-        field.setTextResponder(this::onSearchChanged);
-        field.layout(layout -> layout.positionType(TaffyPosition.ABSOLUTE)
-                .left(SEARCH_TEXT_X)
-                .top(SEARCH_TEXT_Y)
-                .width(SEARCH_TEXT_WIDTH)
-                .height(SEARCH_TEXT_HEIGHT)
-                .paddingAll(1));
-        field.style(style -> style.backgroundTexture(IGuiTexture.EMPTY).zIndex(30));
-        field.textFieldStyle(style -> style.textColor(0xFFFFFFFF)
-                .cursorColor(0xFFFFFFFF)
-                .textShadow(false)
-                .fontSize(9.0F)
-                .placeholder(Component.translatable("gui.recipebook.search_hint"))
-                .focusOverlay(IGuiTexture.EMPTY));
-        return field;
+        return RecipeBookSearchUi.createField(SEARCH_TEXT_X, SEARCH_TEXT_Y, "", this::onSearchChanged);
     }
 
     @OnlyIn(Dist.CLIENT)

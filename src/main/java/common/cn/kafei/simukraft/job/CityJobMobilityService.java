@@ -1,8 +1,10 @@
 package common.cn.kafei.simukraft.job;
 
 import common.cn.kafei.simukraft.SimuKraft;
+import common.cn.kafei.simukraft.citizen.CitizenSelfFeedingService;
 import common.cn.kafei.simukraft.citizen.CitizenTeleportService;
 import common.cn.kafei.simukraft.citizen.CitizenWorkStatus;
+import common.cn.kafei.simukraft.citizen.CitizenWorkplaceMoveService;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
 import common.cn.kafei.simukraft.path.CitizenNavigationService;
 import common.cn.kafei.simukraft.path.MovementIntent;
@@ -36,21 +38,29 @@ public final class CityJobMobilityService {
         };
     }
 
+    // teleportCitizenToWorkplace：保留旧方法名，实际执行顺序是先寻路，失败才传送兜底。
     public static void teleportCitizenToWorkplace(ServerLevel level, UUID citizenId, BlockPos workplacePos, CityJobType jobType, CitizenWorkStatus workStatus, String statusLabel) {
         if (level == null || citizenId == null || workplacePos == null) {
             return;
         }
         CitizenEntity citizenEntity = findCitizenEntity(level, citizenId);
         if (citizenEntity == null) {
-            SimuKraft.LOGGER.warn("Simukraft: Unable to teleport hired citizen {}, entity not found near workplace {}", citizenId, workplacePos);
+            SimuKraft.LOGGER.warn("Simukraft: Unable to move hired citizen {}, entity not found near workplace {}", citizenId, workplacePos);
             return;
         }
-        Vec3 target = Vec3.atBottomCenterOf(workplacePos).add(0.0D, 1.0D, 0.0D);
-        boolean moving = CitizenNavigationService.requestMove(level, citizenId, target, MovementIntent.WORK);
-        if (!moving) {
-            CitizenTeleportService.teleportCitizen(level, citizenId, target);
+        Vec3 target = CitizenWorkplaceMoveService.targetNearWorkplace(level, workplacePos)
+                .orElse(Vec3.atBottomCenterOf(workplacePos.above()));
+        boolean selfFeeding = CitizenSelfFeedingService.isSelfFeeding(level, citizenId);
+        if (!selfFeeding) {
+            CitizenNavigationService.stop(level, citizenId);
+            if (!CitizenNavigationService.requestMove(level, citizenId, target, MovementIntent.WORK)) {
+                CitizenTeleportService.teleportCitizen(level, citizenId, target);
+            }
         }
-        syncCitizenEntityState(citizenEntity, jobType, workStatus, statusLabel);
+        String effectiveStatusLabel = selfFeeding
+                ? CitizenSelfFeedingService.effectiveStatusLabel(level, citizenId, statusLabel)
+                : statusLabel;
+        syncCitizenEntityState(citizenEntity, jobType, workStatus, effectiveStatusLabel);
     }
 
     public static void resetCitizenAfterFire(ServerLevel level, UUID citizenId) {
