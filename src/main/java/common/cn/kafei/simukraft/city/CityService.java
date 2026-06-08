@@ -117,6 +117,14 @@ public final class CityService {
         return CityManager.get(level).setPlayerPermission(cityId, operatorId, targetId, permissionLevel);
     }
 
+    // transferMayor: 对外提供市长转让入口，保持网络层不直接操作管理器。
+    public static boolean transferMayor(ServerLevel level, UUID cityId, UUID operatorId, UUID targetId, String targetName) {
+        if (level == null || cityId == null || operatorId == null || targetId == null) {
+            return false;
+        }
+        return CityManager.get(level).transferMayor(cityId, operatorId, targetId, targetName);
+    }
+
     public static boolean hasPermission(ServerLevel level, UUID cityId, UUID playerId, CityPermissionLevel required) {
         if (level == null || cityId == null || playerId == null || required == null) {
             return false;

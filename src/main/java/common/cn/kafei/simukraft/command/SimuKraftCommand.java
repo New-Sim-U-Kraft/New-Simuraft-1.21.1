@@ -4,10 +4,12 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import common.cn.kafei.simukraft.citizen.CitizenData;
 import common.cn.kafei.simukraft.citizen.CitizenService;
 import common.cn.kafei.simukraft.citizen.CitizenTeleportService;
 import common.cn.kafei.simukraft.city.CityData;
+import common.cn.kafei.simukraft.city.CityPermissionInviteService;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.economy.EconomyService;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
@@ -42,12 +44,26 @@ public final class SimuKraftCommand {
     }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        var root = Commands.literal("simukraft")
-                .requires(source -> source.hasPermission(2));
+        var root = Commands.literal("simukraft");
         root.then(Commands.literal("reload")
+                .requires(source -> source.hasPermission(2))
                 .executes(context -> reload(context.getSource())));
         root.then(Commands.literal("city")
+                .then(Commands.literal("permission")
+                        .then(Commands.literal("accept")
+                                .then(Commands.argument("inviteId", StringArgumentType.word())
+                                        .executes(context -> respondPermissionInvite(
+                                                context.getSource(),
+                                                StringArgumentType.getString(context, "inviteId"),
+                                                true))))
+                        .then(Commands.literal("reject")
+                                .then(Commands.argument("inviteId", StringArgumentType.word())
+                                        .executes(context -> respondPermissionInvite(
+                                                context.getSource(),
+                                                StringArgumentType.getString(context, "inviteId"),
+                                                false)))))
                 .then(Commands.literal("funds")
+                        .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("add")
                                 .then(Commands.argument("amount", DoubleArgumentType.doubleArg(0.01D))
                                         .executes(context -> addFundsToSelfCity(
@@ -59,12 +75,14 @@ public final class SimuKraftCommand {
                                                         DoubleArgumentType.getDouble(context, "amount"),
                                                         EntityArgument.getPlayer(context, "player")))))))
                 .then(Commands.literal("citizens")
+                        .requires(source -> source.hasPermission(2))
                         .then(Commands.literal("spawn")
                                 .then(Commands.argument("count", IntegerArgumentType.integer(1, 500))
                                         .executes(context -> spawnCitizensInSelfCity(
                                                 context.getSource(),
                                                 IntegerArgumentType.getInteger(context, "count")))))));
         root.then(Commands.literal("path")
+                .requires(source -> source.hasPermission(2))
                 .then(Commands.literal("test")
                         .then(Commands.argument("target", Vec3Argument.vec3())
                                 .executes(context -> testNearestCitizenPath(
@@ -98,6 +116,16 @@ public final class SimuKraftCommand {
                 .then(Commands.literal("clear")
                         .executes(context -> clearPathDebug(context.getSource()))));
         dispatcher.register(root);
+    }
+
+    // respondPermissionInvite: 处理聊天点击触发的城市权限邀请接受/拒绝命令。
+    private static int respondPermissionInvite(CommandSourceStack source, String inviteId, boolean accepted) {
+        ServerPlayer player = source.getPlayer();
+        if (player == null) {
+            source.sendFailure(Component.translatable("message.simukraft.path_debug.player_required"));
+            return 0;
+        }
+        return CityPermissionInviteService.respond(player, inviteId, accepted) ? Command.SINGLE_SUCCESS : 0;
     }
 
     private static int reload(CommandSourceStack source) {

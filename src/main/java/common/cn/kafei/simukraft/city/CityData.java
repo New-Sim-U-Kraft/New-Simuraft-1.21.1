@@ -175,6 +175,27 @@ public final class CityData {
         return true;
     }
 
+    // transferMayor: 原子切换市长身份，避免城市同时出现多个市长。
+    public synchronized boolean transferMayor(UUID currentMayorId, UUID targetId, String targetName) {
+        if (currentMayorId == null || targetId == null || currentMayorId.equals(targetId)) {
+            return false;
+        }
+        CityMemberData currentMayor = members.get(currentMayorId);
+        if (currentMayor == null || currentMayor.permissionLevel() != CityPermissionLevel.MAYOR) {
+            return false;
+        }
+        currentMayor.setPermissionLevel(CityPermissionLevel.OFFICIAL);
+        members.compute(targetId, (id, existing) -> {
+            if (existing == null) {
+                return new CityMemberData(id, targetName, CityPermissionLevel.MAYOR);
+            }
+            existing.setPlayerName(targetName);
+            existing.setPermissionLevel(CityPermissionLevel.MAYOR);
+            return existing;
+        });
+        return true;
+    }
+
     public boolean hasPermission(UUID playerId, CityPermissionLevel required) {
         CityMemberData member = members.get(playerId);
         return member != null && member.permissionLevel().atLeast(required);

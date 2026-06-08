@@ -313,6 +313,8 @@ public final class CityCoreScreenOpener {
         if (packet.viewerPermission() == CityPermissionLevel.MAYOR) {
             row.addChild(memberActionButton("screen.simukraft.city_core.members.add_official", 72,
                     () -> sendAddMember(packet.pos(), CityCoreMemberActionPacket.EMPTY_PLAYER_ID, addField.getValue(), CityPermissionLevel.OFFICIAL)));
+            row.addChild(memberActionButton("screen.simukraft.city_core.members.add_mayor", 72,
+                    () -> sendAddMember(packet.pos(), CityCoreMemberActionPacket.EMPTY_PLAYER_ID, addField.getValue(), CityPermissionLevel.MAYOR)));
         }
         return row;
     }
@@ -330,6 +332,8 @@ public final class CityCoreScreenOpener {
         if (packet.viewerPermission() == CityPermissionLevel.MAYOR) {
             row.addChild(memberActionButton("screen.simukraft.city_core.members.add_official", 72,
                     () -> sendAddMember(packet.pos(), candidate.playerId(), candidate.playerName(), CityPermissionLevel.OFFICIAL)));
+            row.addChild(memberActionButton("screen.simukraft.city_core.members.add_mayor", 72,
+                    () -> sendAddMember(packet.pos(), candidate.playerId(), candidate.playerName(), CityPermissionLevel.MAYOR)));
         }
         return row;
     }
@@ -352,6 +356,7 @@ public final class CityCoreScreenOpener {
             if (viewerPermission == CityPermissionLevel.MAYOR && member.permissionLevel() != CityPermissionLevel.MAYOR) {
                 row.addChild(memberActionButton("screen.simukraft.city_core.members.set_citizen", 56, () -> PacketDistributor.sendToServer(new CityCoreMemberActionPacket(pos, CityCoreMemberActionPacket.Action.SET_PERMISSION, member.playerId(), member.playerName(), CityPermissionLevel.CITIZEN))));
                 row.addChild(memberActionButton("screen.simukraft.city_core.members.set_official", 56, () -> PacketDistributor.sendToServer(new CityCoreMemberActionPacket(pos, CityCoreMemberActionPacket.Action.SET_PERMISSION, member.playerId(), member.playerName(), CityPermissionLevel.OFFICIAL))));
+                row.addChild(memberActionButton("screen.simukraft.city_core.members.set_mayor", 56, () -> PacketDistributor.sendToServer(new CityCoreMemberActionPacket(pos, CityCoreMemberActionPacket.Action.SET_PERMISSION, member.playerId(), member.playerName(), CityPermissionLevel.MAYOR))));
             }
             if (viewerPermission.atLeast(CityPermissionLevel.OFFICIAL) && member.permissionLevel() != CityPermissionLevel.MAYOR) {
                 row.addChild(memberActionButton("screen.simukraft.city_core.members.remove", 48, () -> PacketDistributor.sendToServer(new CityCoreMemberActionPacket(pos, CityCoreMemberActionPacket.Action.REMOVE, member.playerId(), member.playerName(), CityPermissionLevel.CITIZEN))));

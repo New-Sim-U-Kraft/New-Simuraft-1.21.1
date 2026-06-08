@@ -3,6 +3,7 @@ package common.cn.kafei.simukraft.network.city.member;
 import common.cn.kafei.simukraft.SimuKraft;
 import common.cn.kafei.simukraft.city.CityData;
 import common.cn.kafei.simukraft.city.CityMemberData;
+import common.cn.kafei.simukraft.city.CityPermissionInviteService;
 import common.cn.kafei.simukraft.city.CityPermissionLevel;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.city.group.CityGroupMessageService;
@@ -85,11 +86,8 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
         CityCoreOpenRequestPacket.openFor(level, player, packet.pos());
     }
 
-    // addOnlinePlayer: 将在线玩家加入城市，并按权限生成城市用户组消息。
+    // addOnlinePlayer: 为在线玩家发起加入或任命邀请，目标确认后再写入城市数据。
     private static MemberActionResult addOnlinePlayer(ServerLevel level, ServerPlayer operator, CityData city, UUID targetId, String rawTargetName, CityPermissionLevel permissionLevel) {
-        if (permissionLevel == CityPermissionLevel.MAYOR) {
-            return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.member_action_failed"));
-        }
         String targetName = rawTargetName == null ? "" : rawTargetName.trim();
         boolean hasTargetId = targetId != null && !EMPTY_PLAYER_ID.equals(targetId);
         if (targetName.isBlank() && !hasTargetId) {
@@ -105,14 +103,7 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
         if (targetCity.isPresent() && !targetCity.get().cityId().equals(city.cityId())) {
             return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.target_has_city", target.getGameProfile().getName()));
         }
-        boolean added = CityService.addPlayer(level, city.cityId(), operator.getUUID(), target.getUUID(), target.getGameProfile().getName(), permissionLevel);
-        if (!added) {
-            return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.member_action_failed"));
-        }
-        Component message = permissionLevel == CityPermissionLevel.OFFICIAL
-                ? Component.translatable("message.simukraft.city_core.official_added", target.getGameProfile().getName(), city.cityName())
-                : Component.translatable("message.simukraft.city_core.member_added", target.getGameProfile().getName(), city.cityName(), permissionName(permissionLevel));
-        return MemberActionResult.succeeded(message, CityUserGroupService.onlinePlayers(level, CityUserGroup.members(city.cityId())));
+        return requestPermissionInvite(level, operator, city, target, permissionLevel);
     }
 
     // removePlayer: 从城市移除成员，并使用变更前用户组快照通知所有相关在线成员。
@@ -132,27 +123,29 @@ public record CityCoreMemberActionPacket(BlockPos pos, Action action, UUID targe
         return MemberActionResult.succeeded(message, beforeGroup);
     }
 
-    // setPermission: 调整成员权限，并向城市用户组广播权限变化。
+    // setPermission: 为成员权限调整发起邀请，避免未经同意直接任命。
     private static MemberActionResult setPermission(ServerLevel level, ServerPlayer operator, CityData city, UUID targetId, String targetName, CityPermissionLevel permissionLevel) {
         Optional<CityMemberData> targetMember = city.member(targetId);
-        if (targetMember.isEmpty() || permissionLevel == CityPermissionLevel.MAYOR) {
-            return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.member_action_failed"));
-        }
-        CityPermissionLevel oldPermission = targetMember.get().permissionLevel();
-        boolean changed = CityService.setPlayerPermission(level, city.cityId(), operator.getUUID(), targetId, permissionLevel);
-        if (!changed) {
+        if (targetMember.isEmpty()) {
             return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.member_action_failed"));
         }
         String displayName = displayName(targetMember.get(), targetName);
-        Component message;
-        if (oldPermission != CityPermissionLevel.OFFICIAL && permissionLevel == CityPermissionLevel.OFFICIAL) {
-            message = Component.translatable("message.simukraft.city_core.official_added", displayName, city.cityName());
-        } else if (oldPermission == CityPermissionLevel.OFFICIAL && permissionLevel == CityPermissionLevel.CITIZEN) {
-            message = Component.translatable("message.simukraft.city_core.official_removed", displayName, city.cityName());
-        } else {
-            message = Component.translatable("message.simukraft.city_core.member_permission_changed", displayName, city.cityName(), permissionName(permissionLevel));
+        if (targetMember.get().permissionLevel() == permissionLevel) {
+            return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.permission_invite_already_role", displayName, city.cityName(), permissionName(permissionLevel)));
         }
-        return MemberActionResult.succeeded(message, CityUserGroupService.onlinePlayers(level, CityUserGroup.members(city.cityId())));
+        ServerPlayer target = level.getServer().getPlayerList().getPlayer(targetId);
+        if (target == null) {
+            return MemberActionResult.failed(Component.translatable("message.simukraft.city_core.player_not_online", displayName));
+        }
+        return requestPermissionInvite(level, operator, city, target, permissionLevel);
+    }
+
+    // requestPermissionInvite: 发起城市权限邀请，等待目标玩家点击接受后再变更权限。
+    private static MemberActionResult requestPermissionInvite(ServerLevel level, ServerPlayer operator, CityData city, ServerPlayer target, CityPermissionLevel permissionLevel) {
+        CityPermissionInviteService.RequestResult result = CityPermissionInviteService.request(level, operator, city, target, permissionLevel);
+        return result.success()
+                ? MemberActionResult.succeeded(result.message(), List.of(operator))
+                : MemberActionResult.failed(result.message());
     }
 
     // displayName: 优先使用服务端已知成员名，缺失时使用包内名称兜底。

@@ -281,6 +281,25 @@ public final class CityManager extends SavedData {
         return changed;
     }
 
+    // transferMayor: 校验城市归属后持久化市长转让结果。
+    public boolean transferMayor(UUID cityId, UUID operatorId, UUID targetId, String targetName) {
+        CityData city = cities.get(cityId);
+        if (city == null || !city.hasPermission(operatorId, CityPermissionLevel.MAYOR)) {
+            return false;
+        }
+        UUID oldCityId = playerCityIndex.get(targetId);
+        if (oldCityId != null && !oldCityId.equals(cityId)) {
+            return false;
+        }
+        boolean changed = city.transferMayor(operatorId, targetId, targetName);
+        if (changed) {
+            playerCityIndex.put(targetId, cityId);
+            saveCityIncremental(city);
+            setDirty();
+        }
+        return changed;
+    }
+
     public boolean hasPermission(UUID cityId, UUID playerId, CityPermissionLevel required) {
         CityData city = cities.get(cityId);
         return city != null && city.hasPermission(playerId, required);

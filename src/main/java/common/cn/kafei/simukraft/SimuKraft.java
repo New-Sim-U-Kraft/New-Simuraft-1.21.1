@@ -9,6 +9,7 @@ import common.cn.kafei.simukraft.citizen.CitizenSelfFeedingService;
 import common.cn.kafei.simukraft.citizen.PopulationGrowthService;
 import common.cn.kafei.simukraft.city.CityChunkManager;
 import common.cn.kafei.simukraft.city.CityManager;
+import common.cn.kafei.simukraft.city.CityPermissionInviteService;
 import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.building.BuilderConstructionService;
 import common.cn.kafei.simukraft.building.BuildingIntegrityService;
@@ -157,6 +158,7 @@ public final class SimuKraft {
             ResidentialRentService.tick(level);
             FarmlandFarmingService.tick(level);
             HudSyncService.tick(level);
+            CityPermissionInviteService.tick(level);
             if (level.getGameTime() % 1200L == 0L) {
                 CityManager.get(level).saveToSqlite(level);
                 CityChunkManager.get(level).saveToSqlite(level);
