@@ -8,6 +8,7 @@ import client.cn.kafei.simukraft.client.ui.SimuKraftWindowFrame;
 import client.cn.kafei.simukraft.client.city.map.SimuMapManager;
 import client.cn.kafei.simukraft.client.city.map.SimuMapRegion;
 import common.cn.kafei.simukraft.city.CityPermissionLevel;
+import common.cn.kafei.simukraft.network.city.chunk.CityChunkBatchPurchasePacket;
 import common.cn.kafei.simukraft.network.city.chunk.CityChunkPurchasePacket;
 import common.cn.kafei.simukraft.network.city.core.CityCoreCreateCityPacket;
 import common.cn.kafei.simukraft.network.city.core.CityCoreManageCityPacket;
@@ -52,6 +53,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -709,11 +711,15 @@ public final class CityCoreScreenOpener {
         private static final int OTHER_BORDER_COLOR = 0xCCFF8800;
         private static final int CURRENT_CHUNK_FILL_COLOR = 0x5500DD00;
         private static final int OTHER_CHUNK_FILL_COLOR = 0x55FF8800;
+        private static final int BATCH_CLAIM_PREVIEW_COLOR = 0x66FFFF55;
         private static final int GRID_COLOR = 0x40000000;
         private static final int CORE_MARKER_COLOR = 0xFF4080FF;
+        private static final int MAX_BATCH_CLAIM_CHUNKS = 256;
+        private static final String BATCH_CLAIM_DRAG_MARKER = "city_chunk_batch_claim";
         private volatile CityCoreMapResponsePacket packet;
         private final ClientCityChunkCache cache = ClientCityChunkCache.getInstance();
         private final SimuMapManager mapManager = SimuMapManager.getInstance();
+        private final LinkedHashSet<Long> batchClaimChunks = new LinkedHashSet<>();
         private double zoomLevel = 4.0D;
         private double offsetX;
         private double offsetY;
@@ -726,6 +732,7 @@ public final class CityCoreScreenOpener {
         private int contextMenuWidth;
         private int contextMenuHeight;
         private boolean contextMenuVisible;
+        private boolean batchClaiming;
         private boolean mapConsumerReleased;
 
         private CityChunkMapElement(CityCoreMapResponsePacket packet) {
@@ -742,7 +749,9 @@ public final class CityCoreScreenOpener {
             });
             addEventListener(UIEvents.MOUSE_WHEEL, this::onMouseWheel);
             addEventListener(UIEvents.MOUSE_DOWN, this::onMouseDown);
+            addEventListener(UIEvents.MOUSE_UP, this::onMouseUp);
             addEventListener(UIEvents.DRAG_SOURCE_UPDATE, this::onDragUpdate);
+            addEventListener(UIEvents.DRAG_END, this::onDragEnd);
             activeMapElement = this;
         }
 
@@ -801,6 +810,7 @@ public final class CityCoreScreenOpener {
             renderGridOverlay(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, startChunkX, startChunkZ);
             renderHoveredChunk(guiContext, startX, startY, width, height, centerX, centerY, chunkSize);
             renderOwnedChunkBorders(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, startChunkX, endChunkX, startChunkZ, endChunkZ);
+            renderBatchClaimPreview(guiContext, startX, startY, width, height, centerX, centerY, chunkSize);
             renderCoreMarker(guiContext, startX, startY, width, height, centerX, centerY, chunkSize);
             renderHoverBox(guiContext, startX, startY, width, height, centerX, centerY, chunkSize);
             renderContextMenu(guiContext, startX, startY, width, height);
@@ -940,6 +950,16 @@ public final class CityCoreScreenOpener {
             }
         }
 
+        private void renderBatchClaimPreview(GUIContext guiContext, int startX, int startY, int width, int height, double centerX, double centerY, double chunkSize) {
+            if (batchClaimChunks.isEmpty()) {
+                return;
+            }
+            for (long chunkLong : batchClaimChunks) {
+                ChunkPos chunkPos = new ChunkPos(chunkLong);
+                drawChunkFill(guiContext, startX, startY, width, height, centerX, centerY, chunkSize, chunkPos.x, chunkPos.z, BATCH_CLAIM_PREVIEW_COLOR);
+            }
+        }
+
         private void renderCoreMarker(GUIContext guiContext, int startX, int startY, int width, int height, double centerX, double centerY, double chunkSize) {
             double markerScreenX = centerX + offsetX + packet.centerChunkX() * chunkSize + (packet.pos().getX() & 15) * zoomLevel;
             double markerScreenY = centerY + offsetY + packet.centerChunkZ() * chunkSize + (packet.pos().getZ() & 15) * zoomLevel;
@@ -1057,6 +1077,34 @@ public final class CityCoreScreenOpener {
             return true;
         }
 
+        private void collectBatchClaimChunk(double mouseX, double mouseY) {
+            if (batchClaimChunks.size() >= MAX_BATCH_CLAIM_CHUNKS || !isMouseInsideMap(mouseX, mouseY)) {
+                return;
+            }
+            int chunkX = screenToChunk(mouseX, mapCenterX(), offsetX, 16.0D * zoomLevel);
+            int chunkZ = screenToChunk(mouseY, mapCenterY(), offsetY, 16.0D * zoomLevel);
+            long chunkLong = ChunkPos.asLong(chunkX, chunkZ);
+            if (!cache.isChunkOwned(chunkLong)) {
+                batchClaimChunks.add(chunkLong);
+            }
+        }
+
+        private void finishBatchClaim() {
+            if (!batchClaiming) {
+                return;
+            }
+            batchClaiming = false;
+            if (batchClaimChunks.isEmpty()) {
+                return;
+            }
+            List<CityChunkBatchPurchasePacket.ChunkEntry> chunks = batchClaimChunks.stream()
+                    .map(ChunkPos::new)
+                    .map(chunkPos -> new CityChunkBatchPurchasePacket.ChunkEntry(chunkPos.x, chunkPos.z))
+                    .toList();
+            batchClaimChunks.clear();
+            PacketDistributor.sendToServer(new CityChunkBatchPurchasePacket(packet.pos(), chunks));
+        }
+
         private int screenToChunk(double screenValue, double centerValue, double offsetValue, double chunkSize) {
             return (int) Math.floor((screenValue - centerValue - offsetValue) / chunkSize);
         }
@@ -1095,6 +1143,15 @@ public final class CityCoreScreenOpener {
                 event.stopPropagation();
                 return;
             }
+            if (event.button == 2) {
+                contextMenuVisible = false;
+                batchClaiming = true;
+                batchClaimChunks.clear();
+                collectBatchClaimChunk(event.x, event.y);
+                event.target.startDrag(BATCH_CLAIM_DRAG_MARKER, null);
+                event.stopPropagation();
+                return;
+            }
             if (event.button == 1) {
                 contextMenuChunkX = screenToChunk(event.x, mapCenterX(), offsetX, 16.0D * zoomLevel);
                 contextMenuChunkZ = screenToChunk(event.y, mapCenterY(), offsetY, 16.0D * zoomLevel);
@@ -1105,8 +1162,24 @@ public final class CityCoreScreenOpener {
             }
         }
 
+        private void onMouseUp(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent event) {
+            if (event.button == 2) {
+                finishBatchClaim();
+                event.stopPropagation();
+            }
+        }
+
+        private void onDragEnd(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent event) {
+            finishBatchClaim();
+        }
+
         private void onDragUpdate(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent event) {
             contextMenuVisible = false;
+            if (BATCH_CLAIM_DRAG_MARKER.equals(event.dragHandler.getDraggingObject())) {
+                collectBatchClaimChunk(event.x, event.y);
+                event.stopPropagation();
+                return;
+            }
             if (event.dragHandler.getDraggingObject() instanceof Vector2f startOffset) {
                 offsetX = startOffset.x + event.x - event.dragStartX;
                 offsetY = startOffset.y + event.y - event.dragStartY;

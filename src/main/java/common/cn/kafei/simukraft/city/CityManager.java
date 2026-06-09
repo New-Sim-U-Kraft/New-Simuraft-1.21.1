@@ -95,6 +95,13 @@ public final class CityManager extends SavedData {
         }
     }
 
+    private void deleteCityIncremental(UUID cityId) {
+        ServerLevel targetLevel = level;
+        if (targetLevel != null && cityId != null) {
+            SimuSqliteStorage.deleteCity(targetLevel, cityId);
+        }
+    }
+
     public CityData createCity(String cityName, UUID mayorId, String mayorName, BlockPos cityCorePos) {
         UUID cityId = UUID.randomUUID();
         CityData city = new CityData(cityId, cityName, mayorId, mayorName, cityCorePos);
@@ -206,6 +213,7 @@ public final class CityManager extends SavedData {
         if (poiManager != null) {
             poiManager.releaseCity(cityId);
         }
+        deleteCityIncremental(cityId);
         setDirty();
         return true;
     }

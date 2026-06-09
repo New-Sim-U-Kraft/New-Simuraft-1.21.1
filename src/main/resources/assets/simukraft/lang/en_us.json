@@ -270,6 +270,8 @@
     "message.simukraft.city_chunk.not_enough_funds":  "The city does not have enough funds. Buying this chunk costs %s.",
     "message.simukraft.city_chunk.claim_failed":  "Failed to buy the chunk.",
     "message.simukraft.city_chunk.claimed":  "Bought chunk %s, %s for %s.",
+    "message.simukraft.city_chunk.batch_claimed":  "Bought %s chunks for %s.",
+    "message.simukraft.city_chunk.batch_claimed_partial":  "Bought %s chunks, skipped %s, for %s.",
     "message.simukraft.city_placement.outside_city":  "This city function block can only be placed inside chunks owned by your city.",
     "message.simukraft.command.city_funds.player_required":  "An online player must be specified when running this command from console.",
     "message.simukraft.command.city_funds.invalid_amount":  "Amount must be greater than 0.",

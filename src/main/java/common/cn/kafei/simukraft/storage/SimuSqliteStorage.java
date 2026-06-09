@@ -14,7 +14,6 @@ import java.util.concurrent.ConcurrentMap;
 public final class SimuSqliteStorage {
     private static final ConcurrentMap<Path, SimuSqliteStorage> STORAGES = new ConcurrentHashMap<>();
 
-    private final SimuSqliteDatabase database;
     private final CitySqliteRepository cities;
     private final CityChunkSqliteRepository cityChunks;
     private final CityPoiSqliteRepository cityPois;
@@ -26,7 +25,6 @@ public final class SimuSqliteStorage {
     private final CommercialSqliteRepository commercial;
 
     private SimuSqliteStorage(SimuSqliteDatabase database) {
-        this.database = database;
         this.cities = new CitySqliteRepository(database);
         this.cityChunks = new CityChunkSqliteRepository(database);
         this.cityPois = new CityPoiSqliteRepository(database);
@@ -51,7 +49,7 @@ public final class SimuSqliteStorage {
     }
 
     private static SimuSqliteStorage openSafely(ServerLevel level) {
-        if (level == null || level.getServer() == null) {
+        if (level == null) {
             return null;
         }
         try {
@@ -69,8 +67,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveCities(ServerLevel level, CompoundTag tag) {
-        if (level != null && level.getServer() != null && tag != null) {
-            open(level.getServer()).cities.saveAll(tag);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && tag != null) {
+            storage.cities.saveAll(tag);
         }
     }
 
@@ -82,8 +81,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void deleteCity(ServerLevel level, UUID cityId) {
-        if (level != null && level.getServer() != null && cityId != null) {
-            open(level.getServer()).cities.delete(cityId);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && cityId != null) {
+            storage.cities.delete(cityId);
         }
     }
 
@@ -100,14 +100,16 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveCityChunk(ServerLevel level, UUID cityId, long chunkLong) {
-        if (level != null && level.getServer() != null && cityId != null) {
-            open(level.getServer()).cityChunks.upsert(cityId, chunkLong);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && cityId != null) {
+            storage.cityChunks.upsert(cityId, chunkLong);
         }
     }
 
     public static void deleteCityChunks(ServerLevel level, UUID cityId) {
-        if (level != null && level.getServer() != null && cityId != null) {
-            open(level.getServer()).cityChunks.deleteCity(cityId);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && cityId != null) {
+            storage.cityChunks.deleteCity(cityId);
         }
     }
 
@@ -117,8 +119,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveCityPois(ServerLevel level, CompoundTag tag) {
-        if (level != null && level.getServer() != null && tag != null) {
-            open(level.getServer()).cityPois.saveAll(tag);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && tag != null) {
+            storage.cityPois.saveAll(tag);
         }
     }
 
@@ -130,8 +133,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void deleteCityPois(ServerLevel level, UUID cityId) {
-        if (level != null && level.getServer() != null && cityId != null) {
-            open(level.getServer()).cityPois.deleteCity(cityId);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && cityId != null) {
+            storage.cityPois.deleteCity(cityId);
         }
     }
 
@@ -148,8 +152,8 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveCitizen(ServerLevel level, CompoundTag citizenTag) {
-        if (level != null && level.getServer() != null && citizenTag != null) {
-            SimuSqliteStorage storage = open(level.getServer());
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && citizenTag != null) {
             storage.citizens.upsert(citizenTag);
         }
     }
@@ -182,7 +186,7 @@ public final class SimuSqliteStorage {
 
     public static List<common.cn.kafei.simukraft.building.BuildingTaskData> loadBuildingTasks(ServerLevel level) {
         SimuSqliteStorage storage = openSafely(level);
-        if (storage == null || level == null) {
+        if (storage == null) {
             return List.of();
         }
         return storage.buildingTasks.findByDimension(level.dimension().location().toString());
@@ -201,8 +205,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveFarmlandBoxes(ServerLevel level, CompoundTag tag) {
-        if (level != null && level.getServer() != null && tag != null) {
-            open(level.getServer()).farmlandBoxes.saveAll(tag);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && tag != null) {
+            storage.farmlandBoxes.saveAll(tag);
         }
     }
 
@@ -226,8 +231,9 @@ public final class SimuSqliteStorage {
     }
 
     public static void saveIndustrialBoxes(ServerLevel level, CompoundTag tag) {
-        if (level != null && level.getServer() != null && tag != null) {
-            open(level.getServer()).industrialBoxes.saveAll(tag);
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && tag != null) {
+            storage.industrialBoxes.saveAll(tag);
         }
     }
 
@@ -306,7 +312,7 @@ public final class SimuSqliteStorage {
 
     public static List<common.cn.kafei.simukraft.planner.PlanningTaskData> loadPlanningTasks(ServerLevel level) {
         SimuSqliteStorage storage = openSafely(level);
-        if (storage == null || level == null) {
+        if (storage == null) {
             return List.of();
         }
         return storage.planningTasks.findByDimension(level.dimension().location().toString());
@@ -319,7 +325,4 @@ public final class SimuSqliteStorage {
         }
     }
 
-    public Path databasePath() {
-        return database.databasePath();
-    }
 }
