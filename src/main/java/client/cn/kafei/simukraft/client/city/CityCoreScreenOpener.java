@@ -966,7 +966,7 @@ public final class CityCoreScreenOpener {
             Minecraft minecraft = Minecraft.getInstance();
             double mouseX = minecraft.mouseHandler.xpos() * minecraft.getWindow().getGuiScaledWidth() / minecraft.getWindow().getScreenWidth();
             double mouseY = minecraft.mouseHandler.ypos() * minecraft.getWindow().getGuiScaledHeight() / minecraft.getWindow().getScreenHeight();
-            if (!isInside(mouseX, mouseY, startX, startY, width, height)) {
+            if (isOutside(mouseX, mouseY, startX, startY, width, height)) {
                 return;
             }
             int chunkX = screenToChunk(mouseX, centerX, offsetX, chunkSize);
@@ -989,7 +989,7 @@ public final class CityCoreScreenOpener {
             Minecraft minecraft = Minecraft.getInstance();
             double mouseX = minecraft.mouseHandler.xpos() * minecraft.getWindow().getGuiScaledWidth() / minecraft.getWindow().getScreenWidth();
             double mouseY = minecraft.mouseHandler.ypos() * minecraft.getWindow().getGuiScaledHeight() / minecraft.getWindow().getScreenHeight();
-            if (!isInside(mouseX, mouseY, startX, startY, width, height)) {
+            if (isOutside(mouseX, mouseY, startX, startY, width, height)) {
                 return;
             }
             int chunkX = screenToChunk(mouseX, centerX, offsetX, chunkSize);
@@ -1055,7 +1055,7 @@ public final class CityCoreScreenOpener {
             if (!contextMenuVisible) {
                 return false;
             }
-            if (!isInside(mouseX, mouseY, contextMenuDrawX, contextMenuDrawY, contextMenuWidth, contextMenuHeight)) {
+            if (isOutside(mouseX, mouseY, contextMenuDrawX, contextMenuDrawY, contextMenuWidth, contextMenuHeight)) {
                 contextMenuVisible = false;
                 return true;
             }
@@ -1107,7 +1107,7 @@ public final class CityCoreScreenOpener {
             double mapStartY = getPositionY() + MAP_TOP_PADDING;
             double mapWidth = getSizeWidth() - MAP_SIDE_PADDING * 2.0D;
             double mapHeight = getSizeHeight() - MAP_TOP_PADDING - MAP_SIDE_PADDING;
-            return !isInside(mouseX, mouseY, mapStartX, mapStartY, mapWidth, mapHeight);
+            return isOutside(mouseX, mouseY, mapStartX, mapStartY, mapWidth, mapHeight);
         }
 
         private double mapCenterX() {
@@ -1118,8 +1118,8 @@ public final class CityCoreScreenOpener {
             return getPositionY() + MAP_TOP_PADDING + (getSizeHeight() - MAP_TOP_PADDING - MAP_SIDE_PADDING) / 2.0D;
         }
 
-        private boolean isInside(double mouseX, double mouseY, double x, double y, double width, double height) {
-            return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
+        private boolean isOutside(double mouseX, double mouseY, double x, double y, double width, double height) {
+            return mouseX < x || mouseX > x + width || mouseY < y || mouseY > y + height;
         }
 
         private void onMouseDown(com.lowdragmc.lowdraglib2.gui.ui.event.UIEvent event) {

@@ -60,7 +60,6 @@ public record CityChunkBatchPurchasePacket(BlockPos pos, List<ChunkEntry> chunks
     }
 
     // handle：服务端顺序购买多个区块，并只发送一次汇总提示。
-    @SuppressWarnings("resource")
     public static void handle(CityChunkBatchPurchasePacket packet, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer player)) {
             return;
