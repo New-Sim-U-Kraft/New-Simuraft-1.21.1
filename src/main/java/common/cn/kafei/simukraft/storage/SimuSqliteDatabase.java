@@ -29,8 +29,12 @@ public final class SimuSqliteDatabase {
     }
 
     public static SimuSqliteDatabase open(MinecraftServer server) {
+        return new SimuSqliteDatabase(databasePath(server));
+    }
+
+    public static Path databasePath(MinecraftServer server) {
         Path worldPath = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
-        return new SimuSqliteDatabase(worldPath.resolve(STORAGE_DIR).resolve(DATABASE_FILE));
+        return worldPath.resolve(STORAGE_DIR).resolve(DATABASE_FILE);
     }
 
     public Connection openConnection() throws SQLException {

@@ -8,8 +8,12 @@ import net.minecraft.server.level.ServerLevel;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class SimuSqliteStorage {
+    private static final ConcurrentMap<Path, SimuSqliteStorage> STORAGES = new ConcurrentHashMap<>();
+
     private final SimuSqliteDatabase database;
     private final CitySqliteRepository cities;
     private final CityChunkSqliteRepository cityChunks;
@@ -35,7 +39,15 @@ public final class SimuSqliteStorage {
     }
 
     public static SimuSqliteStorage open(MinecraftServer server) {
-        return new SimuSqliteStorage(SimuSqliteDatabase.open(server));
+        Path databasePath = SimuSqliteDatabase.databasePath(server).toAbsolutePath().normalize();
+        return STORAGES.computeIfAbsent(databasePath, ignored -> new SimuSqliteStorage(SimuSqliteDatabase.open(server)));
+    }
+
+    public static void clearServerCache(MinecraftServer server) {
+        if (server == null) {
+            return;
+        }
+        STORAGES.remove(SimuSqliteDatabase.databasePath(server).toAbsolutePath().normalize());
     }
 
     private static SimuSqliteStorage openSafely(ServerLevel level) {
