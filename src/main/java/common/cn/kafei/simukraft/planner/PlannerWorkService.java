@@ -51,6 +51,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlannerWorkService {
     private static final ConcurrentMap<String, LevelRuntime> LEVEL_RUNTIMES = new ConcurrentHashMap<>();
     private static final int SAVE_BLOCK_INTERVAL = 16;
+    private static final int SCAN_LIMIT_PER_TICK = 2048;
     private static final long MATERIAL_RETRY_INTERVAL_TICKS = 40L;
     private static final double REACH = 3.0D;
 
@@ -104,6 +105,22 @@ public final class PlannerWorkService {
         }
         PlanningTaskStatus status = PlanningTaskStatus.from(taskRuntime.task.status());
         return status != PlanningTaskStatus.COMPLETED && status != PlanningTaskStatus.INTERRUPTED;
+    }
+
+    // countTargetBlocks：创建任务前统计真正需要处理的方块，避免把空扫计入费用和进度。
+    public static int countTargetBlocks(ServerLevel level, PlanningTaskData task) {
+        if (level == null || task == null) {
+            return 0;
+        }
+        BlockPos chestPos = resolveTaskChest(level, task);
+        int count = 0;
+        for (int index = 0; index < task.totalBlocks(); index++) {
+            BlockPos pos = task.blockAt(index);
+            if (level.isLoaded(pos) && isTargetCell(level, task, pos, chestPos)) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public static void interruptTasksByBuildBox(ServerLevel level, BlockPos buildBoxPos, String reason) {
@@ -189,10 +206,13 @@ public final class PlannerWorkService {
         int budget = consumeBudget(taskRuntime, citizen);
         int index = Math.max(0, task.currentIndex());
         int total = task.totalBlocks();
+        int completed = Math.max(0, task.completedBlocks());
         int processed = 0;
+        int scanned = 0;
         boolean waiting = false;
-        while (index < total && processed < budget) {
+        while (index < total && processed < budget && scanned < SCAN_LIMIT_PER_TICK) {
             BlockPos pos = task.blockAt(index);
+            scanned++;
             if (!level.isLoaded(pos)) {
                 index++;
                 continue;
@@ -203,28 +223,33 @@ public final class PlannerWorkService {
                 break;
             }
             if (result == CellResult.PROCESSED) {
+                completed++;
+                processed++;
                 addXp(taskRuntime, 1);
             }
             index++;
-            processed++;
         }
+        restoreUnusedBudget(taskRuntime, budget - processed);
 
         long now = System.currentTimeMillis();
-        if (waiting && index == task.currentIndex()) {
+        if (waiting) {
             // 等材料：标记状态、设置重试冷却，不推进游标。
             if (level.getGameTime() >= taskRuntime.nextRetryTick) {
                 taskRuntime.nextRetryTick = level.getGameTime() + MATERIAL_RETRY_INTERVAL_TICKS;
             }
-            setStatus(level, citizen, taskRuntime, "缺少方块: 规划" + progressSuffix(task, index), CitizenWorkStatus.WORKING, PlanningTaskStatus.WAITING_MATERIALS);
+            PlanningTaskData updated = task.withProgress(index, completed, PlanningTaskStatus.WAITING_MATERIALS.id(), now);
+            taskRuntime.task = updated;
+            SimuSqliteStorage.savePlanningTask(level, updated);
+            setStatus(level, citizen, taskRuntime, "缺少方块: 规划" + progressSuffix(updated), CitizenWorkStatus.WORKING, PlanningTaskStatus.WAITING_MATERIALS);
             return;
         }
         if (index >= total) {
             completeTask(level, citizen, runtime, taskRuntime);
             return;
         }
-        PlanningTaskData updated = task.withProgress(index, PlanningTaskStatus.PLANNING.id(), now);
+        PlanningTaskData updated = task.withProgress(index, completed, PlanningTaskStatus.PLANNING.id(), now);
         taskRuntime.task = updated;
-        setStatus(level, citizen, taskRuntime, "规划中(" + operationLabel(task.operation()) + ")" + progressSuffix(updated, index), CitizenWorkStatus.WORKING, PlanningTaskStatus.PLANNING);
+        setStatus(level, citizen, taskRuntime, "规划中(" + operationLabel(task.operation()) + ")" + progressSuffix(updated), CitizenWorkStatus.WORKING, PlanningTaskStatus.PLANNING);
         if (index - taskRuntime.lastSavedIndex >= SAVE_BLOCK_INTERVAL) {
             taskRuntime.lastSavedIndex = index;
             SimuSqliteStorage.savePlanningTask(level, updated);
@@ -237,6 +262,35 @@ public final class PlannerWorkService {
             case FILL -> applyFill(level, pos, chestPos, task.fillBlockId());
             case REPLACE -> applyReplace(level, pos, chestPos, task.effectiveReplacementMap(), task.buildBoxPos());
         };
+    }
+
+    // isTargetCell：只做判定不改世界，用于创建任务时计算真实目标总数。
+    private static boolean isTargetCell(ServerLevel level, PlanningTaskData task, BlockPos pos, BlockPos chestPos) {
+        return switch (task.operation()) {
+            case REMOVE -> isRemoveTarget(level, pos, task.buildBoxPos(), chestPos);
+            case FILL -> isFillTarget(level, pos, task.fillBlockId());
+            case REPLACE -> isReplaceTarget(level, pos, task.effectiveReplacementMap(), task.buildBoxPos(), chestPos);
+        };
+    }
+
+    private static boolean isRemoveTarget(ServerLevel level, BlockPos pos, BlockPos boxPos, BlockPos chestPos) {
+        BlockState state = level.getBlockState(pos);
+        return !state.isAir() && !isProtected(level, pos, state, boxPos, chestPos);
+    }
+
+    private static boolean isFillTarget(ServerLevel level, BlockPos pos, String fillBlockId) {
+        BlockState state = level.getBlockState(pos);
+        return (state.isAir() || state.canBeReplaced()) && resolveBlock(fillBlockId) != null;
+    }
+
+    private static boolean isReplaceTarget(ServerLevel level, BlockPos pos, Map<String, String> replacementMap, BlockPos boxPos, BlockPos chestPos) {
+        if (replacementMap == null || replacementMap.isEmpty()) {
+            return false;
+        }
+        BlockState state = level.getBlockState(pos);
+        String sourceBlockId = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
+        String targetBlockId = replacementMap.get(sourceBlockId);
+        return targetBlockId != null && resolveBlock(targetBlockId) != null && !isProtected(level, pos, state, boxPos, chestPos);
     }
 
     private static CellResult applyRemove(ServerLevel level, BlockPos pos, BlockPos chestPos, BlockPos boxPos) {
@@ -345,6 +399,14 @@ public final class PlannerWorkService {
         int budget = Math.min(128, (int) taskRuntime.progressAccumulator);
         taskRuntime.progressAccumulator -= budget;
         return Math.max(0, budget);
+    }
+
+    // restoreUnusedBudget：非目标方块只消耗扫描上限，不消耗规划师实际处理预算。
+    private static void restoreUnusedBudget(TaskRuntime taskRuntime, int unusedBudget) {
+        if (unusedBudget <= 0) {
+            return;
+        }
+        taskRuntime.progressAccumulator = Math.min(128.0D, taskRuntime.progressAccumulator + unusedBudget);
     }
 
     private static double plannerBlocksPerTick(CitizenData citizen) {
@@ -474,8 +536,9 @@ public final class PlannerWorkService {
         };
     }
 
-    private static String progressSuffix(PlanningTaskData task, int index) {
-        return " " + Math.min(index, task.totalBlocks()) + "/" + task.totalBlocks();
+    private static String progressSuffix(PlanningTaskData task) {
+        int targetTotal = Math.max(1, task.targetBlocks());
+        return " " + Math.min(task.completedBlocks(), targetTotal) + "/" + targetTotal;
     }
 
     private static LevelRuntime runtime(ServerLevel level) {

@@ -93,15 +93,15 @@ public final class ServerConfig {
         builder.pop();
         builder.push("npc_leveling");
         NPC_MAX_LEVEL = builder
-                .comment("Maximum NPC profession level.")
+                .comment("Maximum NPC level.")
                 .translation("config.simukraft.npc_leveling.maxLevel")
                 .defineInRange("maxLevel", 20, 1, 20);
         BUILDER_XP_GAIN = builder
-                .comment("Whether builders gain profession experience when placing blocks.")
+                .comment("Whether builders gain NPC experience when placing blocks.")
                 .translation("config.simukraft.npc_leveling.builderEnableXpGain")
                 .define("builderEnableXpGain", true);
         BUILDER_XP_PER_BLOCK = builder
-                .comment("Builder profession experience gained per placed block.")
+                .comment("Builder NPC experience gained per placed block.")
                 .translation("config.simukraft.npc_leveling.builderXpPerBlock")
                 .defineInRange("builderXpPerBlock", 1, 0, 100);
         builder.pop();
@@ -268,11 +268,11 @@ public final class ServerConfig {
                 .translation("config.simukraft.planner.moneyPerBlockReplace")
                 .defineInRange("moneyPerBlockReplace", 0.04D, 0.0D, 1000.0D);
         PLANNER_XP_GAIN = builder
-                .comment("Whether planners gain profession experience when processing blocks.")
+                .comment("Whether planners gain NPC experience when processing blocks.")
                 .translation("config.simukraft.planner.enableXpGain")
                 .define("enableXpGain", true);
         PLANNER_XP_PER_BLOCK = builder
-                .comment("Planner profession experience gained per processed block.")
+                .comment("Planner NPC experience gained per processed block.")
                 .translation("config.simukraft.planner.xpPerBlock")
                 .defineInRange("xpPerBlock", 1, 0, 100);
         PLANNER_PAUSE_AT_NIGHT = builder

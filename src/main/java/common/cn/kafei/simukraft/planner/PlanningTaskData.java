@@ -26,6 +26,8 @@ public record PlanningTaskData(UUID taskId,
                                Map<String, String> replacementMap,
                                int currentIndex,
                                int totalBlocks,
+                               int completedBlocks,
+                               int targetBlocks,
                                String status,
                                long createdAt,
                                long updatedAt) {
@@ -46,7 +48,7 @@ public record PlanningTaskData(UUID taskId,
                             long createdAt,
                             long updatedAt) {
         this(taskId, citizenId, cityId, dimensionId, buildBoxPos, minPos, maxPos, operation, fillBlockId, sourceBlockId,
-                null, Map.of(), currentIndex, totalBlocks, status, createdAt, updatedAt);
+                null, Map.of(), currentIndex, totalBlocks, 0, totalBlocks, status, createdAt, updatedAt);
     }
 
     public PlanningTaskData {
@@ -57,6 +59,10 @@ public record PlanningTaskData(UUID taskId,
         sourceBlockId = sourceBlockId == null ? "" : sourceBlockId;
         materialChestPos = materialChestPos != null ? materialChestPos.immutable() : null;
         replacementMap = immutableReplacementMap(replacementMap);
+        currentIndex = Math.max(0, currentIndex);
+        totalBlocks = Math.max(0, totalBlocks);
+        targetBlocks = targetBlocks <= 0 ? totalBlocks : targetBlocks;
+        completedBlocks = Math.clamp(completedBlocks, 0, targetBlocks);
     }
 
     public static int volume(BlockPos min, BlockPos max) {
@@ -106,8 +112,19 @@ public record PlanningTaskData(UUID taskId,
     }
 
     public PlanningTaskData withProgress(int newIndex, String newStatus, long updatedAtMs) {
+        return withProgress(newIndex, completedBlocks, newStatus, updatedAtMs);
+    }
+
+    public PlanningTaskData withProgress(int newIndex, int newCompletedBlocks, String newStatus, long updatedAtMs) {
         return new PlanningTaskData(taskId, citizenId, cityId, dimensionId, buildBoxPos, minPos, maxPos,
-                operation, fillBlockId, sourceBlockId, materialChestPos, replacementMap, newIndex, totalBlocks, newStatus, createdAt, updatedAtMs);
+                operation, fillBlockId, sourceBlockId, materialChestPos, replacementMap, newIndex, totalBlocks,
+                newCompletedBlocks, targetBlocks, newStatus, createdAt, updatedAtMs);
+    }
+
+    public PlanningTaskData withTargetBlocks(int newTargetBlocks) {
+        return new PlanningTaskData(taskId, citizenId, cityId, dimensionId, buildBoxPos, minPos, maxPos,
+                operation, fillBlockId, sourceBlockId, materialChestPos, replacementMap, currentIndex, totalBlocks,
+                completedBlocks, newTargetBlocks, status, createdAt, updatedAt);
     }
 
     public PlanningTaskData withStatus(String newStatus, long updatedAtMs) {

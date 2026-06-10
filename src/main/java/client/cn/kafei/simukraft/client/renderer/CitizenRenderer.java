@@ -49,16 +49,18 @@ public class CitizenRenderer extends MobRenderer<CitizenEntity, CitizenModel> {
 
     @Override
     protected void renderNameTag(CitizenEntity entity, Component component, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float partialTick) {
-        renderCitizenNameTag(entity, component, poseStack, bufferSource, packedLight);
+        renderCitizenNameTag(entity, poseStack, bufferSource, packedLight);
     }
 
-    private void renderCitizenNameTag(CitizenEntity entity, Component component, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
+    private void renderCitizenNameTag(CitizenEntity entity, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight) {
         if (!shouldShowName(entity)) {
             return;
         }
-        renderExtraLine(entity, component, poseStack, bufferSource, packedLight, entity.getBbHeight() + 0.82F, 0xFFFFFF, 0.025F);
-        renderExtraLine(entity, buildWorkStatusLine(entity), poseStack, bufferSource, packedLight, entity.getBbHeight() + 0.57F, 0xFFFF00, 0.02F);
-        renderExtraLine(entity, Component.translatable(entity.getHungerLevelKey()), poseStack, bufferSource, packedLight, entity.getBbHeight() + 0.35F, 0xFFFF00, 0.02F);
+        float yOffset = entity.getBbHeight() + 0.82F;
+        for (CitizenOverheadStatusRegistry.StatusLine line : CitizenOverheadStatusRegistry.resolve(entity)) {
+            renderExtraLine(entity, line.text(), poseStack, bufferSource, packedLight, yOffset, line.color(), line.scale());
+            yOffset -= 0.23F;
+        }
     }
 
     @Override
@@ -96,15 +98,6 @@ public class CitizenRenderer extends MobRenderer<CitizenEntity, CitizenModel> {
             fileName = fileName.substring(0, fileName.length() - 4);
         }
         return fileName.endsWith("_f");
-    }
-
-    private static Component buildWorkStatusLine(CitizenEntity entity) {
-        String statusLabel = entity.getStatusLabel();
-        if (statusLabel != null && !statusLabel.isBlank()) {
-            return Component.translatable(statusLabel);
-        }
-        String workStatus = entity.getWorkStatus();
-        return Component.translatable(workStatus == null || workStatus.isBlank() ? "work_status.idle" : workStatus);
     }
 
     private void renderExtraLine(CitizenEntity entity, Component component, PoseStack poseStack, MultiBufferSource bufferSource, int packedLight, float yOffset, int color, float scale) {

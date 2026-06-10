@@ -33,9 +33,9 @@ public final class PlanningTaskSqliteRepository {
     public synchronized void upsert(PlanningTaskData task) {
         try (Connection connection = database.openConnection();
              PreparedStatement statement = connection.prepareStatement(
-                     "INSERT INTO planning_tasks(task_id, citizen_id, city_id, dimension_id, box_long, min_long, max_long, operation, fill_block, source_block, material_chest_long, replacement_map, current_index, total_blocks, status, created_at, updated_at) "
-                             + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                             + "ON CONFLICT(task_id) DO UPDATE SET citizen_id = excluded.citizen_id, city_id = excluded.city_id, dimension_id = excluded.dimension_id, box_long = excluded.box_long, min_long = excluded.min_long, max_long = excluded.max_long, operation = excluded.operation, fill_block = excluded.fill_block, source_block = excluded.source_block, material_chest_long = excluded.material_chest_long, replacement_map = excluded.replacement_map, current_index = excluded.current_index, total_blocks = excluded.total_blocks, status = excluded.status, updated_at = excluded.updated_at")) {
+                     "INSERT INTO planning_tasks(task_id, citizen_id, city_id, dimension_id, box_long, min_long, max_long, operation, fill_block, source_block, material_chest_long, replacement_map, current_index, total_blocks, completed_blocks, target_blocks, status, created_at, updated_at) "
+                             + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                             + "ON CONFLICT(task_id) DO UPDATE SET citizen_id = excluded.citizen_id, city_id = excluded.city_id, dimension_id = excluded.dimension_id, box_long = excluded.box_long, min_long = excluded.min_long, max_long = excluded.max_long, operation = excluded.operation, fill_block = excluded.fill_block, source_block = excluded.source_block, material_chest_long = excluded.material_chest_long, replacement_map = excluded.replacement_map, current_index = excluded.current_index, total_blocks = excluded.total_blocks, completed_blocks = excluded.completed_blocks, target_blocks = excluded.target_blocks, status = excluded.status, updated_at = excluded.updated_at")) {
             statement.setString(1, task.taskId().toString());
             statement.setString(2, task.citizenId().toString());
             statement.setString(3, task.cityId() != null ? task.cityId().toString() : null);
@@ -54,9 +54,11 @@ public final class PlanningTaskSqliteRepository {
             statement.setString(12, encodeReplacementMap(task.replacementMap()));
             statement.setInt(13, task.currentIndex());
             statement.setInt(14, task.totalBlocks());
-            statement.setString(15, task.status());
-            statement.setLong(16, task.createdAt());
-            statement.setLong(17, task.updatedAt());
+            statement.setInt(15, task.completedBlocks());
+            statement.setInt(16, task.targetBlocks());
+            statement.setString(17, task.status());
+            statement.setLong(18, task.createdAt());
+            statement.setLong(19, task.updatedAt());
             statement.executeUpdate();
         } catch (SQLException exception) {
             SimuKraft.LOGGER.error("Failed to save planning task to SQLite", exception);
@@ -106,9 +108,16 @@ public final class PlanningTaskSqliteRepository {
                 decodeReplacementMap(resultSet.getString("replacement_map")),
                 resultSet.getInt("current_index"),
                 resultSet.getInt("total_blocks"),
+                resultSet.getInt("completed_blocks"),
+                normalizedTargetBlocks(resultSet),
                 resultSet.getString("status"),
                 resultSet.getLong("created_at"),
                 resultSet.getLong("updated_at"));
+    }
+
+    private static int normalizedTargetBlocks(ResultSet resultSet) throws SQLException {
+        int targetBlocks = resultSet.getInt("target_blocks");
+        return targetBlocks > 0 ? targetBlocks : resultSet.getInt("total_blocks");
     }
 
     private static BlockPos readNullableBlockPos(ResultSet resultSet, String columnName) throws SQLException {

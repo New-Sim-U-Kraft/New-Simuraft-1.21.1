@@ -9,6 +9,7 @@ import net.minecraft.world.item.Items;
 
 import java.util.List;
 
+@SuppressWarnings("null")
 final class LogisticsItemDisplayName {
     private LogisticsItemDisplayName() {
     }

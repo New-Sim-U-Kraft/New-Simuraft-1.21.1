@@ -143,19 +143,7 @@ public record CreatePlanningTaskPacket(BlockPos buildBoxPos,
             }
         }
 
-        double cost = EconomyService.normalizeAmount(volume * ServerConfig.plannerMoneyPerBlock(packet.operation()));
         UUID cityId = plannerContext.cityId();
-        if (cost > 0.0D) {
-            if (!EconomyService.canAfford(level, cityId, cost) || !CityService.withdrawFunds(level, cityId, cost)) {
-                InfoToastService.warning(player, Component.translatable("message.simukraft.plan_area.not_enough_funds", cost));
-                return;
-            }
-            FinanceLedgerService.record(level, cityId, player, -cost, EconomyService.getCityBalance(level, cityId), FinanceTransactionData.Type.EXPENSE, "planner");
-            HudSyncService.syncToCityGroup(level, cityId, true);
-        }
-
-        var planner = plannerContext.planner();
-        PlannerWorkService.cancelTask(level, planner.uuid());
         long now = System.currentTimeMillis();
         String sourceBlockId = packet.sourceBlockId();
         String fillBlockId = packet.fillBlockId();
@@ -164,9 +152,9 @@ public record CreatePlanningTaskPacket(BlockPos buildBoxPos,
             sourceBlockId = firstMapping.getKey();
             fillBlockId = firstMapping.getValue();
         }
-        PlanningTaskData task = new PlanningTaskData(
+        PlanningTaskData draftTask = new PlanningTaskData(
                 UUID.randomUUID(),
-                planner.uuid(),
+                plannerContext.planner().uuid(),
                 cityId,
                 level.dimension().location().toString(),
                 boxPos,
@@ -179,12 +167,33 @@ public record CreatePlanningTaskPacket(BlockPos buildBoxPos,
                 effectiveReplacementMap,
                 0,
                 volume,
+                0,
+                volume,
                 PlanningTaskStatus.QUEUED.id(),
                 now,
                 now);
+        int targetBlocks = PlannerWorkService.countTargetBlocks(level, draftTask);
+        if (targetBlocks <= 0) {
+            InfoToastService.warning(player, Component.translatable("message.simukraft.plan_area.no_targets"));
+            return;
+        }
+
+        double cost = EconomyService.normalizeAmount(targetBlocks * ServerConfig.plannerMoneyPerBlock(packet.operation()));
+        if (cost > 0.0D) {
+            if (!EconomyService.canAfford(level, cityId, cost) || !CityService.withdrawFunds(level, cityId, cost)) {
+                InfoToastService.warning(player, Component.translatable("message.simukraft.plan_area.not_enough_funds", cost));
+                return;
+            }
+            FinanceLedgerService.record(level, cityId, player, -cost, EconomyService.getCityBalance(level, cityId), FinanceTransactionData.Type.EXPENSE, "planner");
+            HudSyncService.syncToCityGroup(level, cityId, true);
+        }
+
+        var planner = plannerContext.planner();
+        PlannerWorkService.cancelTask(level, planner.uuid());
+        PlanningTaskData task = draftTask.withTargetBlocks(targetBlocks);
         PlannerWorkService.startTask(level, task);
         CitizenEmploymentService.hire(level, planner.uuid(), CityJobType.PLANNER, PlannerNetworkValidation.workplaceId(boxPos), boxPos, CitizenWorkStatus.WORKING, "");
-        CityGroupMessageService.successToCity(level, cityId, Component.translatable("message.simukraft.plan_area.started", Component.translatable(packet.operation().translationKey()), volume));
+        CityGroupMessageService.successToCity(level, cityId, Component.translatable("message.simukraft.plan_area.started", Component.translatable(packet.operation().translationKey()), targetBlocks));
     }
 
     private static Map<String, String> effectiveReplacementMap(CreatePlanningTaskPacket packet) {

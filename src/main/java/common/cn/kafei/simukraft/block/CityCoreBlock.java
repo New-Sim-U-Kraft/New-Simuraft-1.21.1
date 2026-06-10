@@ -14,17 +14,34 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.MapColor;
+import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.BlockHitResult;
+
+import java.util.List;
 
 @SuppressWarnings("null")
 public final class CityCoreBlock extends Block {
     public CityCoreBlock() {
-        super(BlockBehaviour.Properties.of().strength(2.0F, 3600000.0F).sound(SoundType.METAL).requiresCorrectToolForDrops());
+        super(BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(1.0F).explosionResistance(3600000.0F).sound(SoundType.METAL));
+    }
+
+    // getDrops: 已绑定城市核心会被保护恢复，不产生掉落以避免复制。
+    @Override
+    protected List<ItemStack> getDrops(BlockState state, LootParams.Builder params) {
+        Vec3 origin = params.getOptionalParameter(LootContextParams.ORIGIN);
+        if (origin != null && CityManager.get(params.getLevel()).getCityByCorePos(BlockPos.containing(origin)).isPresent()) {
+            return List.of();
+        }
+        return super.getDrops(state, params);
     }
 
     @Override
