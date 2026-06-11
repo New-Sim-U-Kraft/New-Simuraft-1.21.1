@@ -31,7 +31,7 @@
     {
       "id": "shop_sells_cooked_salmon",
       "visibleTo": "mixed",
-      "cost": [{ "money": 1.00 }],
+      "cost": [{ "money": 50.00 }],
       "result": [{ "item": "minecraft:cooked_salmon", "count": 1 }],
       "stock": {
         "item": "minecraft:cooked_salmon",

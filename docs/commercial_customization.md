@@ -345,3 +345,14 @@ Get-ChildItem .\run\simukraftbuilding\commercial,.\src\main\resources\assets\sim
 | 玩家或 NPC 买东西不扣原材料 | 对应出售报价的 `stock.materials` 是否存在，材料是否放在商业控制盒附近容器 |
 | 写了 `materials` 但自动补货不生效 | `materials` 非空会切换到材料供给型库存，不再使用 `restockAmount/restockInterval` |
 | 中文 JSON 在 PowerShell 中校验失败 | 命令是否使用 `-Encoding UTF8` |
+
+## 旧版价格同步规则
+
+内置商业 JSON 的商品价格必须以旧版 `sellPrice` / `buyPrice` 为来源，并按旧版 `retail` 语义解释数量：
+
+- `trades` 中 `retail: true` 表示零售，`sellPrice` 是单个物品价格，新版 `result.count` 通常为 1。
+- `trades` 中缺省 `retail` 或 `retail: false` 表示按组出售，`sellPrice` 是一组 64 个物品的价格，新版应写成 `result.count: 64` 且 `cost.money` 直接等于旧版 `sellPrice`。
+- `buyTrades` 按旧版收购界面以组为单位，`buyPrice` 是一组 64 个物品的价格，新版应写成 `cost.count: 64` 且 `result.money` 直接等于旧版 `buyPrice`。
+- 旧版没有 `sellPrice` / `buyPrice` 的新增兑换项，不应声明为旧版价格来源。
+
+已按该规则校准：建材店 `JCSD` 的 64 个建材交易、伐木工小屋 `lumberjacksHome` 的木头/树苗组交易，以及零售食品店铺的单个物品价格。

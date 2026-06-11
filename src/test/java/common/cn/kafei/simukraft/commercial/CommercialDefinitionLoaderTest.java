@@ -84,13 +84,14 @@ class CommercialDefinitionLoaderTest {
                   "shopMode": "NPC_SELL",
                   "heldItem": "minecraft:bread",
                   "workTime": { "start": 100, "end": 12000 },
-                  "trades": [
-                    {
-                      "item": "minecraft:bread",
-                      "sellPrice": 0.25,
-                      "maxStock": 64,
-                      "restockAmount": 32,
-                      "requiredMaterials": [{ "item": "minecraft:wheat", "count": 3 }]
+                      "trades": [
+                        {
+                          "item": "minecraft:bread",
+                          "sellPrice": 0.25,
+                          "retail": true,
+                          "maxStock": 64,
+                          "restockAmount": 32,
+                          "requiredMaterials": [{ "item": "minecraft:wheat", "count": 3 }]
                     }
                   ],
                   "buyTrades": []
@@ -105,8 +106,46 @@ class CommercialDefinitionLoaderTest {
         assertTrue(offer.visibleToNpc());
         assertEquals(0.25D, offer.cost().getFirst().money());
         assertEquals("minecraft:bread", offer.result().getFirst().itemId());
+        assertEquals(1, offer.result().getFirst().count());
         assertTrue(offer.stock().materialBacked());
         assertEquals("minecraft:wheat", offer.stock().materials().getFirst().itemId());
+    }
+
+    @Test
+    void convertsLegacyWholesalePricesAsStackGroups() throws Exception {
+        CommercialDefinition definition = load("""
+                {
+                  "buildingId": "building_materials",
+                  "buildingName": "Building Materials",
+                  "shopMode": "MIXED",
+                  "trades": [
+                    {
+                      "item": "minecraft:oak_planks",
+                      "sellPrice": 2.24,
+                      "maxStock": 512,
+                      "restockAmount": 256
+                    }
+                  ],
+                  "buyTrades": [
+                    {
+                      "item": "minecraft:oak_log",
+                      "buyPrice": 7.16,
+                      "maxBuyAmount": 256
+                    }
+                  ]
+                }
+                """);
+
+        CommercialOffer sellOffer = definition.offerById("sell_oak_planks_0");
+        assertNotNull(sellOffer);
+        assertEquals(2.24D, sellOffer.cost().getFirst().money());
+        assertEquals(64, sellOffer.result().getFirst().count());
+
+        CommercialOffer buyOffer = definition.offerById("buy_oak_log_0");
+        assertNotNull(buyOffer);
+        assertEquals(64, buyOffer.cost().getFirst().count());
+        assertEquals(7.16D, buyOffer.result().getFirst().money());
+        assertEquals(16384, buyOffer.stock().max());
     }
 
     @Test
@@ -147,6 +186,12 @@ class CommercialDefinitionLoaderTest {
         assertMaterial("meatStand.json", "shop_sells_cooked_chicken", "minecraft:chicken", 1);
         assertMaterial("seaboatShoping.json", "shop_sells_cooked_cod", "minecraft:cod", 1);
         assertMaterial("seaboatShoping.json", "shop_sells_cooked_salmon", "minecraft:salmon", 1);
+        assertMoney("seaboatShoping.json", "shop_sells_cooked_salmon", 50.0D);
+        assertMoney("JCSD.json", "buy_oak_planks", 2.24D);
+        assertResultMoney("JCSD.json", "sell_oak_planks", 1.79D);
+        assertResultItemCount("lumberjacksHome.json", "shop_sells_oak_log", 64);
+        assertCostItemCount("lumberjacksHome.json", "shop_buys_oak_sapling", 64);
+        assertResultMoney("lumberjacksHome.json", "shop_buys_oak_sapling", 0.53D);
         assertMaterial("SimuFriedChicken.json", "shop_sells_cooked_chicken", "minecraft:chicken", 1);
         assertMaterial("SimuFriedChicken.json", "shop_sells_bread", "minecraft:wheat", 3);
         assertMaterial("SimuFriedChicken.json", "shop_sells_baked_potato", "minecraft:potato", 1);
@@ -164,6 +209,34 @@ class CommercialDefinitionLoaderTest {
         assertTrue(offer.stock().materialBacked(), offerId);
         assertEquals(itemId, offer.stock().materials().getFirst().itemId());
         assertEquals(count, offer.stock().materials().getFirst().count());
+    }
+
+    /** assertMoney: 校验指定商业报价的资金成本。 */
+    private void assertMoney(String fileName, String offerId, double amount) throws Exception {
+        CommercialOffer offer = load(commercialResource(fileName)).offerById(offerId);
+        assertNotNull(offer);
+        assertEquals(amount, offer.cost().getFirst().money());
+    }
+
+    /** assertResultMoney: 校验指定商业报价的资金产出。 */
+    private void assertResultMoney(String fileName, String offerId, double amount) throws Exception {
+        CommercialOffer offer = load(commercialResource(fileName)).offerById(offerId);
+        assertNotNull(offer);
+        assertEquals(amount, offer.result().getFirst().money());
+    }
+
+    /** assertResultItemCount: 校验指定商业报价的物品产出数量。 */
+    private void assertResultItemCount(String fileName, String offerId, int count) throws Exception {
+        CommercialOffer offer = load(commercialResource(fileName)).offerById(offerId);
+        assertNotNull(offer);
+        assertEquals(count, offer.result().getFirst().count());
+    }
+
+    /** assertCostItemCount: 校验指定商业报价的物品成本数量。 */
+    private void assertCostItemCount(String fileName, String offerId, int count) throws Exception {
+        CommercialOffer offer = load(commercialResource(fileName)).offerById(offerId);
+        assertNotNull(offer);
+        assertEquals(count, offer.cost().getFirst().count());
     }
 
     private Path commercialResource(String fileName) throws Exception {

@@ -9,6 +9,7 @@ import common.cn.kafei.simukraft.citizen.CitizenManager;
 import common.cn.kafei.simukraft.city.CityData;
 import common.cn.kafei.simukraft.city.CityService;
 import common.cn.kafei.simukraft.city.FinanceTransactionData;
+import common.cn.kafei.simukraft.commercial.CommercialTaxService;
 import common.cn.kafei.simukraft.city.poi.CityPoiData;
 import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
@@ -63,7 +64,9 @@ public final class ResidentialRentService {
     private static void collectRentForDay(ServerLevel level, long rentDay) {
         Map<UUID, Double> rentByCity = collectRentByCity(level);
         rentByCity.forEach((cityId, amount) -> collectCityRent(level, cityId, rentDay, amount));
-        notifyPlayerIncome(level, rentByCity);
+        Map<UUID, Double> taxByCity = CommercialTaxService.collectDueTaxes(level, rentDay);
+        taxByCity.keySet().forEach(cityId -> syncCityMembers(level, cityId));
+        notifyPlayerIncome(level, rentByCity, taxByCity);
     }
 
     public static void clearServerCaches(MinecraftServer server) {
@@ -136,14 +139,15 @@ public final class ResidentialRentService {
     }
 
     /** notifyPlayerIncome: 收租窗口触发后立即通知玩家，不再使用延迟计时器。 */
-    private static void notifyPlayerIncome(ServerLevel level, Map<UUID, Double> rentByCity) {
+    private static void notifyPlayerIncome(ServerLevel level, Map<UUID, Double> rentByCity, Map<UUID, Double> taxByCity) {
         for (ServerPlayer player : level.players()) {
-            double rentAmount = CityService.findPlayerCity(level, player.getUUID())
+            UUID cityId = CityService.findPlayerCity(level, player.getUUID())
                     .map(CityData::cityId)
-                    .map(cityId -> rentByCity.getOrDefault(cityId, 0.0D))
-                    .orElse(0.0D);
+                    .orElse(null);
+            double rentAmount = cityId != null ? rentByCity.getOrDefault(cityId, 0.0D) : 0.0D;
+            double taxAmount = cityId != null ? taxByCity.getOrDefault(cityId, 0.0D) : 0.0D;
             level.playSound(null, player.blockPosition(), ModSoundEvents.MONEY_COLLECT.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
-            InfoToastService.money(player, incomeSummary(rentAmount, 0.0D));
+            InfoToastService.money(player, incomeSummary(rentAmount, taxAmount));
             HudSyncService.syncToPlayer(player, true);
         }
     }

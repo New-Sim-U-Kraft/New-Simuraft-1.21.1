@@ -593,6 +593,7 @@
     "job.building_material_merchant":  "Building Material Merchant",
     "screen.simukraft.city_core.finance.reason.commercial_trade":  "Commercial Trade",
     "screen.simukraft.city_core.finance.reason.commercial_npc_trade":  "Commercial Operation",
+    "screen.simukraft.city_core.finance.reason.commercial_enterprise_tax":  "Enterprise Tax",
     "gui.simukraft.commercial.title":  "Commercial Control Panel",
     "gui.simukraft.commercial.trade_title":  "Commercial Trade",
     "gui.simukraft.commercial.building_line":  "Building: %s",

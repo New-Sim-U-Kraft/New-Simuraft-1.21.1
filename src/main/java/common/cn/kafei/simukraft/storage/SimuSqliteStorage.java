@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -303,6 +304,24 @@ public final class SimuSqliteStorage {
         if (storage != null) {
             storage.commercial.deleteStockAtBox(boxPosLong);
         }
+    }
+
+    /** addCommercialDailyIncome: 写入指定城市当天的商业营业收入增量。 */
+    public static boolean addCommercialDailyIncome(ServerLevel level, UUID cityId, long incomeDay, double amount) {
+        SimuSqliteStorage storage = openSafely(level);
+        return storage != null && storage.commercial.addDailyIncome(cityId, incomeDay, amount);
+    }
+
+    /** loadUntaxedCommercialIncome: 读取指定日期前尚未结算企业税的商业收入。 */
+    public static Map<UUID, Double> loadUntaxedCommercialIncome(ServerLevel level, long dayExclusive) {
+        SimuSqliteStorage storage = openSafely(level);
+        return storage != null ? storage.commercial.loadUntaxedIncomeBefore(dayExclusive) : Map.of();
+    }
+
+    /** markCommercialIncomeTaxCollected: 标记指定城市在日期前的企业税已结算。 */
+    public static boolean markCommercialIncomeTaxCollected(ServerLevel level, UUID cityId, long dayExclusive) {
+        SimuSqliteStorage storage = openSafely(level);
+        return storage != null && storage.commercial.markIncomeTaxCollectedBefore(cityId, dayExclusive);
     }
 
     public static void savePlanningTask(ServerLevel level, common.cn.kafei.simukraft.planner.PlanningTaskData task) {

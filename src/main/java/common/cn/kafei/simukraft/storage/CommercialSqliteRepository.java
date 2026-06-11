@@ -8,6 +8,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @SuppressWarnings("null")
 public final class CommercialSqliteRepository {
@@ -148,6 +151,67 @@ public final class CommercialSqliteRepository {
         } catch (SQLException exception) {
             SimuKraft.LOGGER.error("Failed to load commercial stock from SQLite", exception);
             return null;
+        }
+    }
+
+    /** addDailyIncome: 累加指定城市在某个 MC 日的商业营业收入。 */
+    public synchronized boolean addDailyIncome(UUID cityId, long incomeDay, double amount) {
+        if (cityId == null || incomeDay <= 0L || amount <= 0.0D) {
+            return false;
+        }
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO commercial_daily_income(city_id, income_day, income, tax_collected) "
+                             + "VALUES(?, ?, ?, 0) "
+                             + "ON CONFLICT(city_id, income_day) DO UPDATE SET income = income + excluded.income")) {
+            statement.setString(1, cityId.toString());
+            statement.setLong(2, incomeDay);
+            statement.setDouble(3, amount);
+            return statement.executeUpdate() > 0;
+        } catch (SQLException exception) {
+            SimuKraft.LOGGER.error("Failed to add commercial daily income to SQLite", exception);
+            return false;
+        }
+    }
+
+    /** loadUntaxedIncomeBefore: 读取指定日期之前尚未上交企业税的商业收入。 */
+    public synchronized Map<UUID, Double> loadUntaxedIncomeBefore(long dayExclusive) {
+        if (dayExclusive <= 1L) {
+            return Map.of();
+        }
+        Map<UUID, Double> result = new LinkedHashMap<>();
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT city_id, SUM(income) AS income FROM commercial_daily_income "
+                             + "WHERE income_day < ? AND tax_collected = 0 GROUP BY city_id")) {
+            statement.setLong(1, dayExclusive);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    result.put(UUID.fromString(resultSet.getString("city_id")), resultSet.getDouble("income"));
+                }
+            }
+        } catch (SQLException | IllegalArgumentException exception) {
+            SimuKraft.LOGGER.error("Failed to load untaxed commercial income from SQLite", exception);
+            return Map.of();
+        }
+        return Map.copyOf(result);
+    }
+
+    /** markIncomeTaxCollectedBefore: 标记指定城市在日期之前的商业收入已完成企业税结算。 */
+    public synchronized boolean markIncomeTaxCollectedBefore(UUID cityId, long dayExclusive) {
+        if (cityId == null || dayExclusive <= 1L) {
+            return false;
+        }
+        try (Connection connection = database.openConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE commercial_daily_income SET tax_collected = 1 "
+                             + "WHERE city_id = ? AND income_day < ? AND tax_collected = 0")) {
+            statement.setString(1, cityId.toString());
+            statement.setLong(2, dayExclusive);
+            return statement.executeUpdate() > 0;
+        } catch (SQLException exception) {
+            SimuKraft.LOGGER.error("Failed to mark commercial income tax as collected in SQLite", exception);
+            return false;
         }
     }
 

@@ -593,6 +593,7 @@
     "job.building_material_merchant":  "建材商人",
     "screen.simukraft.city_core.finance.reason.commercial_trade":  "商业交易",
     "screen.simukraft.city_core.finance.reason.commercial_npc_trade":  "商业经营",
+    "screen.simukraft.city_core.finance.reason.commercial_enterprise_tax":  "企业税",
     "gui.simukraft.commercial.title":  "商业控制面板",
     "gui.simukraft.commercial.trade_title":  "商业交易",
     "gui.simukraft.commercial.building_line":  "建筑：%s",

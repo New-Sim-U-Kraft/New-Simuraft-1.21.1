@@ -11,6 +11,7 @@ import java.util.Locale;
 
 final class CommercialLegacyDefinitionParser {
     private static final long LEGACY_RESTOCK_INTERVAL_TICKS = 12000L;
+    private static final int LEGACY_GROUP_COUNT = 64;
 
     private CommercialLegacyDefinitionParser() {
     }
@@ -63,6 +64,8 @@ final class CommercialLegacyDefinitionParser {
     private static CommercialOffer legacySellOffer(JsonObject root, JsonObject object, CommercialVisibility visibility, int index, int maxResources) {
         String itemId = string(object, "item", "");
         double price = decimal(object, "sellPrice", decimal(object, "price", 0.0D));
+        boolean retail = bool(object, "retail", false);
+        int resultCount = retail ? 1 : LEGACY_GROUP_COUNT;
         int maxStock = Math.max(0, integerAny(object, 0, "maxStock", "max_stock", "max"));
         int restockAmount = Math.max(0, integerAny(object, 0, "restockAmount", "restock_amount"));
         List<CommercialOffer.MaterialRequirement> materials = legacyMaterials(root, object, itemId, maxResources);
@@ -73,7 +76,7 @@ final class CommercialLegacyDefinitionParser {
                 legacyOfferId("sell", itemId, index),
                 visibility,
                 List.of(CommercialResource.money(price)),
-                List.of(CommercialResource.item(itemId, 1)),
+                List.of(CommercialResource.item(itemId, resultCount)),
                 stock
         );
     }
@@ -81,14 +84,15 @@ final class CommercialLegacyDefinitionParser {
     private static CommercialOffer legacyBuyOffer(JsonObject object, CommercialVisibility visibility, int index) {
         String itemId = string(object, "item", "");
         double price = decimal(object, "buyPrice", decimal(object, "price", 0.0D));
-        int maxStock = Math.max(0, integerAny(object, 0, "maxBuyAmount", "max_buy_amount", "max"));
+        int maxGroups = Math.max(0, integerAny(object, 0, "maxBuyAmount", "max_buy_amount", "max"));
+        int maxStock = (int) Math.min(Integer.MAX_VALUE, (long) maxGroups * LEGACY_GROUP_COUNT);
         CommercialOffer.StockRule stock = maxStock > 0
                 ? new CommercialOffer.StockRule(itemId, maxStock, 0, 0, 0L, List.of())
                 : null;
         return new CommercialOffer(
                 legacyOfferId("buy", itemId, index),
                 visibility,
-                List.of(CommercialResource.item(itemId, 1)),
+                List.of(CommercialResource.item(itemId, LEGACY_GROUP_COUNT)),
                 List.of(CommercialResource.money(price)),
                 stock
         );

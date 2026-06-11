@@ -18,7 +18,7 @@
     {
       "id": "buy_oak_planks",
       "visibleTo": "mixed",
-      "cost": [{ "money": 143.36 }],
+      "cost": [{ "money": 2.24 }],
       "result": [{ "item": "minecraft:oak_planks", "count": 64 }],
       "stock": { "item": "minecraft:oak_planks", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -26,13 +26,13 @@
       "id": "sell_oak_planks",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:oak_planks", "count": 64 }],
-      "result": [{ "money": 114.56 }],
+      "result": [{ "money": 1.79 }],
       "stock": { "item": "minecraft:oak_planks", "max": 512 }
     },
     {
       "id": "buy_oak_log",
       "visibleTo": "mixed",
-      "cost": [{ "money": 573.44 }],
+      "cost": [{ "money": 8.96 }],
       "result": [{ "item": "minecraft:oak_log", "count": 64 }],
       "stock": { "item": "minecraft:oak_log", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -40,13 +40,13 @@
       "id": "sell_oak_log",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:oak_log", "count": 64 }],
-      "result": [{ "money": 458.24 }],
+      "result": [{ "money": 7.16 }],
       "stock": { "item": "minecraft:oak_log", "max": 512 }
     },
     {
       "id": "buy_cobblestone",
       "visibleTo": "mixed",
-      "cost": [{ "money": 65.28 }],
+      "cost": [{ "money": 1.02 }],
       "result": [{ "item": "minecraft:cobblestone", "count": 64 }],
       "stock": { "item": "minecraft:cobblestone", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -54,13 +54,13 @@
       "id": "sell_cobblestone",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:cobblestone", "count": 64 }],
-      "result": [{ "money": 51.84 }],
+      "result": [{ "money": 0.81 }],
       "stock": { "item": "minecraft:cobblestone", "max": 512 }
     },
     {
       "id": "buy_stone",
       "visibleTo": "mixed",
-      "cost": [{ "money": 104.32 }],
+      "cost": [{ "money": 1.63 }],
       "result": [{ "item": "minecraft:stone", "count": 64 }],
       "stock": { "item": "minecraft:stone", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -68,13 +68,13 @@
       "id": "sell_stone",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:stone", "count": 64 }],
-      "result": [{ "money": 83.20 }],
+      "result": [{ "money": 1.30 }],
       "stock": { "item": "minecraft:stone", "max": 512 }
     },
     {
       "id": "buy_glass",
       "visibleTo": "mixed",
-      "cost": [{ "money": 162.56 }],
+      "cost": [{ "money": 2.54 }],
       "result": [{ "item": "minecraft:glass", "count": 64 }],
       "stock": { "item": "minecraft:glass", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -82,13 +82,13 @@
       "id": "sell_glass",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:glass", "count": 64 }],
-      "result": [{ "money": 129.92 }],
+      "result": [{ "money": 2.03 }],
       "stock": { "item": "minecraft:glass", "max": 512 }
     },
     {
       "id": "buy_white_wool",
       "visibleTo": "mixed",
-      "cost": [{ "money": 112.64 }],
+      "cost": [{ "money": 1.76 }],
       "result": [{ "item": "minecraft:white_wool", "count": 64 }],
       "stock": { "item": "minecraft:white_wool", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -96,13 +96,13 @@
       "id": "sell_white_wool",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:white_wool", "count": 64 }],
-      "result": [{ "money": 89.60 }],
+      "result": [{ "money": 1.40 }],
       "stock": { "item": "minecraft:white_wool", "max": 512 }
     },
     {
       "id": "buy_bricks",
       "visibleTo": "mixed",
-      "cost": [{ "money": 232.32 }],
+      "cost": [{ "money": 3.63 }],
       "result": [{ "item": "minecraft:bricks", "count": 64 }],
       "stock": { "item": "minecraft:bricks", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -110,13 +110,13 @@
       "id": "sell_bricks",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:bricks", "count": 64 }],
-      "result": [{ "money": 185.60 }],
+      "result": [{ "money": 2.90 }],
       "stock": { "item": "minecraft:bricks", "max": 512 }
     },
     {
       "id": "buy_stone_bricks",
       "visibleTo": "mixed",
-      "cost": [{ "money": 301.44 }],
+      "cost": [{ "money": 4.71 }],
       "result": [{ "item": "minecraft:stone_bricks", "count": 64 }],
       "stock": { "item": "minecraft:stone_bricks", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -124,13 +124,13 @@
       "id": "sell_stone_bricks",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:stone_bricks", "count": 64 }],
-      "result": [{ "money": 240.64 }],
+      "result": [{ "money": 3.76 }],
       "stock": { "item": "minecraft:stone_bricks", "max": 512 }
     },
     {
       "id": "buy_oak_fence",
       "visibleTo": "mixed",
-      "cost": [{ "money": 138.24 }],
+      "cost": [{ "money": 2.16 }],
       "result": [{ "item": "minecraft:oak_fence", "count": 64 }],
       "stock": { "item": "minecraft:oak_fence", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -138,13 +138,13 @@
       "id": "sell_oak_fence",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:oak_fence", "count": 64 }],
-      "result": [{ "money": 110.08 }],
+      "result": [{ "money": 1.72 }],
       "stock": { "item": "minecraft:oak_fence", "max": 512 }
     },
     {
       "id": "buy_sandstone",
       "visibleTo": "mixed",
-      "cost": [{ "money": 160.00 }],
+      "cost": [{ "money": 2.50 }],
       "result": [{ "item": "minecraft:sandstone", "count": 64 }],
       "stock": { "item": "minecraft:sandstone", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -152,13 +152,13 @@
       "id": "sell_sandstone",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:sandstone", "count": 64 }],
-      "result": [{ "money": 128.00 }],
+      "result": [{ "money": 2.00 }],
       "stock": { "item": "minecraft:sandstone", "max": 512 }
     },
     {
       "id": "buy_quartz_block",
       "visibleTo": "mixed",
-      "cost": [{ "money": 627.20 }],
+      "cost": [{ "money": 9.80 }],
       "result": [{ "item": "minecraft:quartz_block", "count": 64 }],
       "stock": { "item": "minecraft:quartz_block", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -166,13 +166,13 @@
       "id": "sell_quartz_block",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:quartz_block", "count": 64 }],
-      "result": [{ "money": 501.76 }],
+      "result": [{ "money": 7.84 }],
       "stock": { "item": "minecraft:quartz_block", "max": 512 }
     },
     {
       "id": "buy_white_concrete",
       "visibleTo": "mixed",
-      "cost": [{ "money": 736.00 }],
+      "cost": [{ "money": 11.50 }],
       "result": [{ "item": "minecraft:white_concrete", "count": 64 }],
       "stock": { "item": "minecraft:white_concrete", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -180,13 +180,13 @@
       "id": "sell_white_concrete",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:white_concrete", "count": 64 }],
-      "result": [{ "money": 588.80 }],
+      "result": [{ "money": 9.20 }],
       "stock": { "item": "minecraft:white_concrete", "max": 512 }
     },
     {
       "id": "buy_terracotta",
       "visibleTo": "mixed",
-      "cost": [{ "money": 640.00 }],
+      "cost": [{ "money": 10.00 }],
       "result": [{ "item": "minecraft:terracotta", "count": 64 }],
       "stock": { "item": "minecraft:terracotta", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -194,13 +194,13 @@
       "id": "sell_terracotta",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:terracotta", "count": 64 }],
-      "result": [{ "money": 512.00 }],
+      "result": [{ "money": 8.00 }],
       "stock": { "item": "minecraft:terracotta", "max": 512 }
     },
     {
       "id": "buy_sand",
       "visibleTo": "mixed",
-      "cost": [{ "money": 76.80 }],
+      "cost": [{ "money": 1.20 }],
       "result": [{ "item": "minecraft:sand", "count": 64 }],
       "stock": { "item": "minecraft:sand", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
     },
@@ -208,7 +208,7 @@
       "id": "sell_sand",
       "visibleTo": "player",
       "cost": [{ "item": "minecraft:sand", "count": 64 }],
-      "result": [{ "money": 61.44 }],
+      "result": [{ "money": 0.96 }],
       "stock": { "item": "minecraft:sand", "max": 512 }
     },
     {

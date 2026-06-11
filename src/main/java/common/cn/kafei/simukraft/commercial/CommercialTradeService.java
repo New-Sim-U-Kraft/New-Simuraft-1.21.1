@@ -88,19 +88,15 @@ public final class CommercialTradeService {
         if (!supplyValidation.success()) {
             return supplyValidation;
         }
-        double expense = totalMoney(offer.result(), 1);
-        if (expense > 0.0D && !EconomyService.withdrawCityFunds(level, building.cityId(), null, expense, "commercial_npc_trade")) {
-            return TradeResult.fail("message.simukraft.commercial.not_enough_funds");
+        if (totalMoney(offer.result(), 1) > 0.0D) {
+            return TradeResult.fail("message.simukraft.commercial.npc_trade_unsupported");
         }
         if (!CommercialTradeSupplyService.apply(level, boxPos, offer, 1)) {
-            if (expense > 0.0D) {
-                EconomyService.depositCityFunds(level, building.cityId(), null, expense, "commercial_npc_trade_refund");
-            }
             return TradeResult.fail("message.simukraft.commercial.insufficient_materials");
         }
         double income = totalMoney(offer.cost(), 1);
         if (income > 0.0D) {
-            EconomyService.depositCityFunds(level, building.cityId(), null, income, "commercial_npc_trade");
+            CommercialTaxService.recordShopIncome(level, building.cityId(), income);
         }
         return TradeResult.success("message.simukraft.commercial.npc_trade_done");
     }
