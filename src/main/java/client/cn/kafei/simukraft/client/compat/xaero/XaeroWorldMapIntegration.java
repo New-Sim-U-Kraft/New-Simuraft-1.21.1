@@ -81,7 +81,7 @@ public final class XaeroWorldMapIntegration {
             }
         }
         for (MapRegion mapRegion : loadedMapRegions) {
-            processor.addToRefresh(mapRegion, true);
+            mapRegion.requestRefresh(processor);
         }
     }
 
