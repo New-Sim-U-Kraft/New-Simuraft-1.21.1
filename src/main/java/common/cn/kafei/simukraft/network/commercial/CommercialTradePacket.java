@@ -66,6 +66,7 @@ public record CommercialTradePacket(BlockPos pos, UUID workerId, String offerId,
                     player.containerMenu.setCarried(result.carriedStack().copy());
                 }
                 player.containerMenu.broadcastChanges();
+                player.inventoryMenu.broadcastChanges();
                 PacketDistributor.sendToPlayer(player, CommercialTradeOpenResponsePacket.from(CommercialControlBoxService.buildTradeView(level, packet.pos(), packet.workerId())));
             } else {
                 InfoToastService.warning(player, result.message());

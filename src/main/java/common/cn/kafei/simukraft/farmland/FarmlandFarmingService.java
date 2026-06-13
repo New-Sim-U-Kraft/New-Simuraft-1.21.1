@@ -19,7 +19,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BonemealableBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -167,6 +169,9 @@ public final class FarmlandFarmingService {
             if (phase == FarmlandWorkPhase.PLANT && !hasSeed(level, chestPos, data.crop())) {
                 continue;
             }
+            if (phase == FarmlandWorkPhase.BONEMEAL && !hasBoneMeal(level, chestPos)) {
+                continue;
+            }
             FarmlandWorkTarget target = findTarget(level, data, chestPos, boxRuntime, phase);
             if (target != null) {
                 boxRuntime.activeTarget = target;
@@ -205,7 +210,8 @@ public final class FarmlandFarmingService {
 
     // usesGroupedFarmScan：这些阶段必须整块做完，再跨过水槽进入下一块。
     private static boolean usesGroupedFarmScan(FarmlandWorkPhase phase) {
-        return phase == FarmlandWorkPhase.TILL || phase == FarmlandWorkPhase.PLANT || phase == FarmlandWorkPhase.HARVEST;
+        return phase == FarmlandWorkPhase.TILL || phase == FarmlandWorkPhase.PLANT
+                || phase == FarmlandWorkPhase.BONEMEAL || phase == FarmlandWorkPhase.HARVEST;
     }
 
     private static boolean needsWork(ServerLevel level, FarmlandBoxData data, BlockPos chestPos, FarmlandWorkPhase phase, BlockPos cropPos) {
@@ -213,6 +219,7 @@ public final class FarmlandFarmingService {
             case DIG_WATER -> needsWaterWork(level, data, chestPos, cropPos);
             case TILL -> needsTillWork(level, data, cropPos);
             case PLANT -> needsPlantWork(level, data, cropPos);
+            case BONEMEAL -> needsBonemealWork(level, data, chestPos, cropPos);
             case HARVEST -> needsHarvestWork(level, data, cropPos);
         };
     }
@@ -269,6 +276,7 @@ public final class FarmlandFarmingService {
             case DIG_WATER -> applyWaterWork(level, data, chestPos, target.cropPos());
             case TILL -> applyTillWork(level, data, target.cropPos());
             case PLANT -> applyPlantWork(level, data, chestPos, target.cropPos());
+            case BONEMEAL -> applyBonemealWork(level, data, chestPos, target.cropPos());
             case HARVEST -> applyHarvestWork(level, data, chestPos, target.cropPos());
         };
     }
@@ -357,6 +365,42 @@ public final class FarmlandFarmingService {
             BlockPos cropPos = plot.cellAt(index);
             if (!isSkippedBoxCell(data.boxPos(), cropPos) && level.isLoaded(cropPos) && needsPlantWork(level, data, cropPos)) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean needsBonemealWork(ServerLevel level, FarmlandBoxData data, BlockPos chestPos, BlockPos cropPos) {
+        FarmCrop crop = data.crop();
+        if (crop == null || FarmlandWorkGeometry.isWaterTrough(data.plot(), cropPos)) return false;
+        BlockState state = level.getBlockState(cropPos);
+        if (!crop.isOwnPlant(state) || crop.isMatureFull(state)) return false;
+        return state.getBlock() instanceof BonemealableBlock b
+                && b.isValidBonemealTarget(level, cropPos, state)
+                && hasBoneMeal(level, chestPos);
+    }
+
+    private static FarmlandWorkResult applyBonemealWork(ServerLevel level, FarmlandBoxData data, BlockPos chestPos, BlockPos cropPos) {
+        if (!needsBonemealWork(level, data, chestPos, cropPos)) return FarmlandWorkResult.SKIPPED;
+        if (!consumeBoneMeal(level, chestPos)) return FarmlandWorkResult.SKIPPED;
+        BlockState state = level.getBlockState(cropPos);
+        ((BonemealableBlock) state.getBlock()).performBonemeal(level, level.getRandom(), cropPos, state);
+        return FarmlandWorkResult.PROCESSED;
+    }
+
+    private static boolean hasBoneMeal(ServerLevel level, BlockPos chestPos) {
+        if (chestPos == null) return false;
+        for (GenericContainerAccess.SlotSnapshot slot : GenericContainerAccess.snapshotSlots(level, chestPos)) {
+            if (slot.stack().getItem() == Items.BONE_MEAL) return true;
+        }
+        return false;
+    }
+
+    private static boolean consumeBoneMeal(ServerLevel level, BlockPos chestPos) {
+        if (chestPos == null) return false;
+        for (GenericContainerAccess.SlotSnapshot slot : GenericContainerAccess.snapshotSlots(level, chestPos)) {
+            if (slot.stack().getItem() == Items.BONE_MEAL) {
+                return GenericContainerAccess.consumeSingleItemAtSlot(level, chestPos, slot.slot(), slot.access(), slot.side(), Items.BONE_MEAL);
             }
         }
         return false;

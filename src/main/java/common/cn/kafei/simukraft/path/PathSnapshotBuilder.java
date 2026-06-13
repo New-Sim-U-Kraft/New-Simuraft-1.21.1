@@ -40,7 +40,8 @@ final class PathSnapshotBuilder {
     private static final double MAX_LOW_STAND_OFFSET = 0.75D;
     // A legitimate floor support's top sits at or below the cell's own grid Y (collision height
     // <= 1.0). Anything higher is a fence/wall/closed-gate protruding into the cell, never a surface.
-    private static final double FLOOR_TOP_EPSILON = 1.0E-4D;
+    // 0.0626 covers grass_path's 15/16-height top surface (0.0625 below grid)
+    private static final double FLOOR_TOP_EPSILON = 0.0626D;
 
     private PathSnapshotBuilder() {
     }
@@ -121,7 +122,7 @@ final class PathSnapshotBuilder {
             if (!isFootPassable(cache, pos, foot) || !isHeadPassable(cache, pos.above(), head)) {
                 return null;
             }
-            return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), pos.getY(), true, climbable, false, 1.8D);
+            return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), pos.getY(), true, climbable, false, 5.0D);
         }
         if (climbable && isFootPassable(cache, pos, foot) && isHeadPassable(cache, pos.above(), head)) {
             return new PathCell(pos.immutable(), pos.getX(), pos.getY(), pos.getZ(), pos.getY(), false, true, false, 2.0D);

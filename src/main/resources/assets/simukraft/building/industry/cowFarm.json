@@ -70,16 +70,15 @@
     },
     {
       "id": "leather_produce",
-      "name": "皮革生产",
+      "name": "挤牛奶",
       "recipeId": "leather_produce",
-      "recipeName": "皮革生产",
-      "heldItem": "minecraft:golden_axe",
+      "recipeName": "挤牛奶",
+      "heldItem": "minecraft:bucket",
       "inputs": [
-        { "item": "minecraft:wheat", "count": 2 }
+        { "item": "minecraft:bucket", "count": 1 }
       ],
       "outputs": [
-        { "item": "minecraft:beef", "baseAmount": 1, "randomRange": 2, "probability": 1 },
-        { "item": "minecraft:leather", "baseAmount": 1, "randomRange": 2, "probability": 1 }
+        { "item": "minecraft:milk_bucket", "baseAmount": 1, "randomRange": 1, "probability": 1, "ignoreMultiplier": true }
       ],
       "steps": [
         { "type": "move_to_container", "container": "input", "range": 1.2 },
@@ -87,29 +86,21 @@
         { "type": "inspect_container", "ticks": 20, "container": "input" },
         { "type": "require_inputs", "container": "input" },
         { "type": "require_output_space", "container": "output" },
-        { "type": "set_held_item", "item": "minecraft:wheat" },
+        { "type": "set_held_item", "item": "minecraft:bucket" },
         { "type": "move_to", "point": "stand", "range": 1.2 },
         { "type": "look_at", "point": "machine" },
-        { "type": "use_item", "ticks": 30, "swing": true },
-        { "type": "breed_entities", "entityType": "minecraft:cow", "count": 1, "radius": 8, "point": "machine", "container": "input", "requireFood": true },
-        { "type": "set_held_item", "item": "minecraft:golden_axe" },
-        { "type": "move_to", "point": "stand", "range": 1.2 },
-        { "type": "look_at", "point": "machine" },
-        { "type": "use_item", "ticks": 20, "swing": true },
-        { "type": "slaughter_entities", "entityType": "minecraft:cow", "count": 1, "radius": 8, "point": "machine" },
-        { "type": "require_drops", "radius": 8, "point": "machine" },
-        { "type": "set_held_item", "item": "minecraft:beef" },
+        { "type": "use_item", "ticks": 80, "swing": true },
+        { "type": "set_held_item", "item": "minecraft:milk_bucket" },
         { "type": "move_to_container", "container": "output", "range": 1.2 },
         { "type": "look_at_container", "container": "output" },
         { "type": "inspect_container", "ticks": 20, "container": "output" },
-        { "type": "collect_drops", "output": "output", "radius": 8, "point": "machine" }
+        { "type": "craft_recipe", "input": "input", "output": "output" }
       ],
       "materials": [
-        { "item": "minecraft:wheat", "count": 2, "consume": true }
+        { "item": "minecraft:bucket", "count": 1, "consume": true }
       ],
       "products": [
-        { "item": "minecraft:beef", "baseAmount": 1, "randomRange": 2, "probability": 1 },
-        { "item": "minecraft:leather", "baseAmount": 1, "randomRange": 2, "probability": 1 }
+        { "item": "minecraft:milk_bucket", "baseAmount": 1, "randomRange": 1, "probability": 1, "ignoreMultiplier": true }
       ]
     },
     {

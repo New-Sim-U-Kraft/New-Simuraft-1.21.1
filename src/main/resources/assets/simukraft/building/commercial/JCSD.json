@@ -224,6 +224,97 @@
       "cost": [{ "item": "minecraft:sand", "count": 64 }],
       "result": [{ "item": "minecraft:glass", "count": 32 }],
       "stock": { "item": "minecraft:glass", "max": 512 }
+    },
+    {
+      "id": "buy_dirt",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 0.51 }],
+      "result": [{ "item": "minecraft:dirt", "count": 64 }],
+      "stock": { "item": "minecraft:dirt", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_dirt",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:dirt", "count": 64 }],
+      "result": [{ "money": 0.41 }],
+      "stock": { "item": "minecraft:dirt", "max": 512 }
+    },
+    {
+      "id": "buy_granite",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 1.28 }],
+      "result": [{ "item": "minecraft:granite", "count": 64 }],
+      "stock": { "item": "minecraft:granite", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_granite",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:granite", "count": 64 }],
+      "result": [{ "money": 1.02 }],
+      "stock": { "item": "minecraft:granite", "max": 512 }
+    },
+    {
+      "id": "buy_andesite",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 1.28 }],
+      "result": [{ "item": "minecraft:andesite", "count": 64 }],
+      "stock": { "item": "minecraft:andesite", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_andesite",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:andesite", "count": 64 }],
+      "result": [{ "money": 1.02 }],
+      "stock": { "item": "minecraft:andesite", "max": 512 }
+    },
+    {
+      "id": "buy_diorite",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 1.28 }],
+      "result": [{ "item": "minecraft:diorite", "count": 64 }],
+      "stock": { "item": "minecraft:diorite", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_diorite",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:diorite", "count": 64 }],
+      "result": [{ "money": 1.02 }],
+      "stock": { "item": "minecraft:diorite", "max": 512 }
+    },
+    {
+      "id": "buy_cobbled_deepslate",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 2.04 }],
+      "result": [{ "item": "minecraft:cobbled_deepslate", "count": 64 }],
+      "stock": { "item": "minecraft:cobbled_deepslate", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_cobbled_deepslate",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:cobbled_deepslate", "count": 64 }],
+      "result": [{ "money": 1.63 }],
+      "stock": { "item": "minecraft:cobbled_deepslate", "max": 512 }
+    },
+    {
+      "id": "buy_mud",
+      "visibleTo": "mixed",
+      "cost": [{ "money": 0.71 }],
+      "result": [{ "item": "minecraft:mud", "count": 64 }],
+      "stock": { "item": "minecraft:mud", "max": 512, "initial": 256, "restockAmount": 256, "restockInterval": 12000 }
+    },
+    {
+      "id": "sell_mud",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:mud", "count": 64 }],
+      "result": [{ "money": 0.57 }],
+      "stock": { "item": "minecraft:mud", "max": 512 }
+    },
+    {
+      "id": "exchange_cobbled_deepslate_to_deepslate",
+      "visibleTo": "player",
+      "cost": [{ "item": "minecraft:cobbled_deepslate", "count": 64 }],
+      "result": [{ "item": "minecraft:deepslate", "count": 32 }],
+      "stock": { "item": "minecraft:deepslate", "max": 512 }
     }
   ]
 }

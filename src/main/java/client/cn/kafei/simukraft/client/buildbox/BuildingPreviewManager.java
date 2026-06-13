@@ -32,7 +32,7 @@ public final class BuildingPreviewManager {
 
     public static void startPreview(BuildingStructure structure, BlockPos origin) {
         clearPreview();
-        if (structure == null || origin == null || !isPlacementAllowed(structure, origin, 0, false)) {
+        if (structure == null || origin == null || !isPlacementAllowed(structure, origin, 0, true)) {
             return;
         }
         previewOrigin = origin;

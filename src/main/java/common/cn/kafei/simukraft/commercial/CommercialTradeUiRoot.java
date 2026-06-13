@@ -16,6 +16,7 @@ import common.cn.kafei.simukraft.network.commercial.CommercialTradePacket;
 import common.cn.kafei.simukraft.ui.RecipeBookSearchUi;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -206,7 +207,9 @@ public final class CommercialTradeUiRoot extends UIElement {
         if (event.button != 0 || offer == null || !canTrade(offer)) {
             return;
         }
-        tradeSelected(true);
+        boolean isRetail = !offer.result().isEmpty() && offer.result().get(0).count() == 1;
+        int count = (Screen.hasShiftDown() && isRetail) ? 64 : 1;
+        tradeSelected(true, count);
         event.stopImmediatePropagation();
     }
 
@@ -340,10 +343,10 @@ public final class CommercialTradeUiRoot extends UIElement {
         guiContext.pose.popPose();
     }
 
-    private void tradeSelected(boolean quickMove) {
+    private void tradeSelected(boolean quickMove, int count) {
         CommercialTradeOpenResponsePacket.OfferEntry offer = selectedOffer();
         if (offer != null && canTrade(offer) && packet.workerId() != null) {
-            PacketDistributor.sendToServer(new CommercialTradePacket(packet.boxPos(), packet.workerId(), offer.id(), 1, quickMove));
+            PacketDistributor.sendToServer(new CommercialTradePacket(packet.boxPos(), packet.workerId(), offer.id(), count, quickMove));
         }
     }
 

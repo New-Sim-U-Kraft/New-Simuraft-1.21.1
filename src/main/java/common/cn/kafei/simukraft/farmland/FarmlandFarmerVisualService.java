@@ -39,6 +39,7 @@ final class FarmlandFarmerVisualService {
             case DIG_WATER -> new ItemStack(Items.WATER_BUCKET);
             case TILL, HARVEST -> new ItemStack(Items.IRON_HOE);
             case PLANT -> crop != null ? new ItemStack(crop.seed()) : ItemStack.EMPTY;
+            case BONEMEAL -> new ItemStack(Items.BONE_MEAL);
         };
     }
 

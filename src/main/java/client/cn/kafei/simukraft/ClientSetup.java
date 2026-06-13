@@ -1,6 +1,7 @@
 package client.cn.kafei.simukraft;
 
 import client.cn.kafei.simukraft.client.ClientHUDOverlay;
+import client.cn.kafei.simukraft.client.CityEntryHud;
 import client.cn.kafei.simukraft.client.ClientSimukraftData;
 import client.cn.kafei.simukraft.client.buildbox.BuildingCacheService;
 import client.cn.kafei.simukraft.client.buildbox.BuildingBoundsRenderer;
@@ -31,6 +32,7 @@ public final class ClientSetup {
     @SubscribeEvent
     public static void onRenderGuiPost(RenderGuiEvent.Post event) {
         ClientHUDOverlay.render(event);
+        CityEntryHud.render(event.getGuiGraphics(), event.getPartialTick().getGameTimeDeltaPartialTick(true));
     }
 
     @SubscribeEvent
@@ -53,6 +55,7 @@ public final class ClientSetup {
         TwoPointSelectionManager.clear();
         NpcPathDebugRenderer.clear();
         FarmlandHoverPreview.clear();
+        CityEntryHud.reset();
     }
 
     @SubscribeEvent
@@ -60,6 +63,7 @@ public final class ClientSetup {
         if (SimuMapManager.isAvailable()) {
             SimuMapManager.getInstance().tick();
         }
+        CityEntryHud.onClientTick();
     }
 
     @SubscribeEvent
