@@ -5,6 +5,7 @@ import common.cn.kafei.simukraft.city.poi.CityPoiManager;
 import common.cn.kafei.simukraft.city.poi.CityPoiType;
 import common.cn.kafei.simukraft.entity.CitizenEntity;
 import common.cn.kafei.simukraft.job.CityJobType;
+import common.cn.kafei.simukraft.config.ServerConfig;
 import common.cn.kafei.simukraft.path.CitizenNavigationService;
 import common.cn.kafei.simukraft.path.MovementIntent;
 import common.cn.kafei.simukraft.util.SaveScopedCacheKey;
@@ -60,28 +61,35 @@ public final class CitizenHomeRestService {
         ConcurrentMap<UUID, Vec3> homeTargets = new ConcurrentHashMap<>();
         CityPoiManager poiManager = CityPoiManager.get(level);
         CitizenManager manager = CitizenManager.get(level);
+        int newlyRested = 0;
         for (CitizenData citizen : manager.allCitizens()) {
-            if (citizen.dead()) {
-                continue;
-            }
-            if (citizen.homeId() == null) {
+            if (citizen.dead() || citizen.homeId() == null) {
                 continue;
             }
             CityPoiData home = poiManager.getPoi(citizen.homeId());
             if (home == null || !home.active() || home.type() != CityPoiType.RESIDENTIAL) {
                 continue;
             }
-            Vec3 homeTarget = homeTargets.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
             if (restedCitizens.contains(citizen.uuid())) {
-                CitizenTeleportService.reconcileLoadedCitizenEntities(level, citizen.uuid(), homeTarget);
+                // resolveHomeTarget 仅在实体已加载时才需要，避免每 40 tick 对全量市民重复扫描。
+                CitizenEntity entity = CitizenTeleportService.findCitizenEntity(level, citizen.uuid());
+                if (entity != null) {
+                    Vec3 homeTarget = homeTargets.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
+                    CitizenTeleportService.reconcileLoadedCitizenEntities(level, citizen.uuid(), homeTarget);
+                }
                 continue;
             }
+            if (newlyRested >= ServerConfig.citizenMaxNewRestsPerTick()) {
+                continue;
+            }
+            Vec3 homeTarget = homeTargets.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
             if (moveOrTeleportHome(level, citizen, homeTarget)) {
                 citizen.setWorkStatus(CitizenWorkStatus.RESTING);
                 citizen.setStatusLabel("夜间回家休息");
                 citizen.setWorkNeedDetail(HOME_REST_MARKER);
                 manager.saveCitizenNow(citizen.uuid());
                 restedCitizens.add(citizen.uuid());
+                newlyRested++;
             }
         }
     }

@@ -32,6 +32,7 @@ public final class ServerConfig {
     public static final ModConfigSpec.IntValue PATH_REPATH_COOLDOWN_TICKS;
     public static final ModConfigSpec.IntValue PATH_CACHE_TTL_TICKS;
     public static final ModConfigSpec.BooleanValue PATH_DEBUG;
+    public static final ModConfigSpec.IntValue CITIZEN_MAX_NEW_RESTS_PER_TICK;
     public static final ModConfigSpec.IntValue BUILDING_INTEGRITY_AUTO_DEMOLISH_THRESHOLD_PERCENT;
     public static final ModConfigSpec.IntValue BUILDING_INTEGRITY_CHECK_INTERVAL_TICKS;
     public static final ModConfigSpec.DoubleValue BUILDING_INTEGRITY_REPAIR_MONEY_PER_BLOCK;
@@ -214,6 +215,10 @@ public final class ServerConfig {
                 .comment("Whether NPC pathfinding debug logs are enabled.")
                 .translation("config.simukraft.npc_pathfinding.debugPathfinding")
                 .define("debugPathfinding", false);
+        CITIZEN_MAX_NEW_RESTS_PER_TICK = builder
+                .comment("Maximum citizens processed for home rest per 40-tick window to spread nightly load.")
+                .translation("config.simukraft.npc_pathfinding.citizenMaxNewRestsPerTick")
+                .defineInRange("citizenMaxNewRestsPerTick", 8, 1, 256);
         builder.pop();
         builder.push("building_integrity");
         BUILDING_INTEGRITY_AUTO_DEMOLISH_THRESHOLD_PERCENT = builder
@@ -410,6 +415,10 @@ public final class ServerConfig {
 
     public static int pathMaxNewRequestsPerTick() {
         return PATH_MAX_NEW_REQUESTS_PER_TICK.get();
+    }
+
+    public static int citizenMaxNewRestsPerTick() {
+        return CITIZEN_MAX_NEW_RESTS_PER_TICK.get();
     }
 
     public static int pathWorkerThreads() {

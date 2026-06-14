@@ -16,6 +16,7 @@ import common.cn.kafei.simukraft.building.BuildingIntegrityService;
 import common.cn.kafei.simukraft.building.PlacedBuildingService;
 import common.cn.kafei.simukraft.building.ResidentialBedPoiService;
 import common.cn.kafei.simukraft.commercial.CommercialBoxManager;
+import common.cn.kafei.simukraft.building.BuildingCatalog;
 import common.cn.kafei.simukraft.commercial.CommercialDefinitionLoader;
 import common.cn.kafei.simukraft.commercial.CommercialFoodMarketService;
 import common.cn.kafei.simukraft.commercial.CommercialStockManager;
@@ -210,6 +211,7 @@ public final class SimuKraft {
         ResidentialRentService.clearServerCaches(event.getServer());
         HudSyncService.clearServerCaches(event.getServer());
         CommercialDefinitionLoader.clearCache();
+        BuildingCatalog.clearCache();
         WorkMaterialPolicy.clearCache();
         NpcBlockProtectionPolicy.clearCache();
         PlayerWelcomeService.clearServerCaches(event.getServer());

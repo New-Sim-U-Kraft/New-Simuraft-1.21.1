@@ -12,9 +12,12 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public final class BuildingCatalog {
     private static final String ROOT_DIR = "simukraftbuilding";
+    private static final ConcurrentMap<String, List<BuildingDefinition>> CATALOG_CACHE = new ConcurrentHashMap<>();
 
     private BuildingCatalog() {
     }
@@ -30,6 +33,11 @@ public final class BuildingCatalog {
     }
 
     public static List<BuildingDefinition> listBuildings(String category) {
+        String key = normalizeCategory(category);
+        List<BuildingDefinition> cached = CATALOG_CACHE.get(key);
+        if (cached != null) {
+            return cached;
+        }
         BuildingBuiltinResourceService.ensureCopied(rootDirectory());
         Path categoryDir = categoryDirectory(category);
         if (!Files.isDirectory(categoryDir)) {
@@ -41,7 +49,7 @@ public final class BuildingCatalog {
                     .filter(BuildingCatalog::isMetaFile)
                     .sorted(Comparator.comparing(path -> path.getFileName().toString().toLowerCase(Locale.ROOT)))
                     .forEach(path -> {
-                        BuildingDefinition definition = readDefinition(normalizeCategory(category), path);
+                        BuildingDefinition definition = readDefinition(key, path);
                         if (definition != null) {
                             buildings.add(definition);
                         }
@@ -50,7 +58,13 @@ public final class BuildingCatalog {
             SimuKraft.LOGGER.error("Simukraft: Failed to scan building category {}", category, exception);
             return List.of();
         }
-        return List.copyOf(buildings);
+        List<BuildingDefinition> result = List.copyOf(buildings);
+        CATALOG_CACHE.put(key, result);
+        return result;
+    }
+
+    public static void clearCache() {
+        CATALOG_CACHE.clear();
     }
 
     public static Path rootDirectory() {
@@ -89,13 +103,21 @@ public final class BuildingCatalog {
 
     private static String findValue(String text, String key, String fallback) {
         String prefix = key + ":";
-        for (String line : text.split("\\R")) {
-            String trimmedLine = line.trim();
-            if (!trimmedLine.regionMatches(true, 0, prefix, 0, prefix.length())) {
-                continue;
+        int start = 0;
+        int len = text.length();
+        while (start < len) {
+            int nl = text.indexOf('\n', start);
+            int lineEnd = nl < 0 ? len : (nl > start && text.charAt(nl - 1) == '\r' ? nl - 1 : nl);
+            int s = start;
+            while (s < lineEnd && text.charAt(s) <= ' ') s++;
+            if (lineEnd - s >= prefix.length() && text.regionMatches(true, s, prefix, 0, prefix.length())) {
+                int vs = s + prefix.length();
+                while (vs < lineEnd && text.charAt(vs) <= ' ') vs++;
+                int ve = lineEnd;
+                while (ve > vs && text.charAt(ve - 1) <= ' ') ve--;
+                return ve > vs ? text.substring(vs, ve) : fallback;
             }
-            String value = trimmedLine.substring(prefix.length()).trim();
-            return value.isEmpty() ? fallback : value;
+            start = nl < 0 ? len : nl + 1;
         }
         return fallback;
     }
