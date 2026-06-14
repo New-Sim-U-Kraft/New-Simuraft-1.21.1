@@ -39,6 +39,8 @@ public final class CitizenHomeRestService {
     private static final int REST_END_TIME = 0;
     // 记录本晚已经处理过的居民，避免每 40 tick 反复传送造成抖动。
     private static final ConcurrentMap<String, Set<UUID>> RESTED_CITIZENS_BY_LEVEL = new ConcurrentHashMap<>();
+    // 跨 tick 持久缓存家位置，避免每 40 tick 重算 resolveHomeAnchor（17×5×17 扫描）。
+    private static final ConcurrentMap<UUID, Vec3> HOME_TARGET_CACHE = new ConcurrentHashMap<>();
 
     private CitizenHomeRestService() {
     }
@@ -57,8 +59,6 @@ public final class CitizenHomeRestService {
             return;
         }
         Set<UUID> restedCitizens = RESTED_CITIZENS_BY_LEVEL.computeIfAbsent(levelKey, ignored -> ConcurrentHashMap.newKeySet());
-        // 同一张床可能分给多个居民，本 tick 只计算一次安全落点。
-        ConcurrentMap<UUID, Vec3> homeTargets = new ConcurrentHashMap<>();
         CityPoiManager poiManager = CityPoiManager.get(level);
         CitizenManager manager = CitizenManager.get(level);
         int newlyRested = 0;
@@ -74,7 +74,7 @@ public final class CitizenHomeRestService {
                 // resolveHomeTarget 仅在实体已加载时才需要，避免每 40 tick 对全量市民重复扫描。
                 CitizenEntity entity = CitizenTeleportService.findCitizenEntity(level, citizen.uuid());
                 if (entity != null) {
-                    Vec3 homeTarget = homeTargets.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
+                    Vec3 homeTarget = HOME_TARGET_CACHE.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
                     CitizenTeleportService.reconcileLoadedCitizenEntities(level, citizen.uuid(), homeTarget);
                 }
                 continue;
@@ -82,7 +82,7 @@ public final class CitizenHomeRestService {
             if (newlyRested >= ServerConfig.citizenMaxNewRestsPerTick()) {
                 continue;
             }
-            Vec3 homeTarget = homeTargets.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
+            Vec3 homeTarget = HOME_TARGET_CACHE.computeIfAbsent(home.poiId(), ignored -> resolveHomeTarget(level, home.pos()));
             if (moveOrTeleportHome(level, citizen, homeTarget)) {
                 citizen.setWorkStatus(CitizenWorkStatus.RESTING);
                 citizen.setStatusLabel("夜间回家休息");
@@ -146,6 +146,7 @@ public final class CitizenHomeRestService {
     public static void clearServerCaches(MinecraftServer server) {
         String serverKey = SaveScopedCacheKey.serverKey(server);
         RESTED_CITIZENS_BY_LEVEL.keySet().removeIf(key -> key.startsWith(serverKey + "|"));
+        HOME_TARGET_CACHE.clear();
     }
 
     // resolveHomeTarget：解析住宅床边的安全脚底坐标，供回家和新入住生成共用。
