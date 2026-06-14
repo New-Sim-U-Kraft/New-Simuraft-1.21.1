@@ -69,13 +69,13 @@ public final class CommercialWorkService {
             return;
         }
         PlacedBuildingRecord building = CommercialControlBoxService.resolveBuilding(level, data.boxPos());
-        CommercialDefinitionLoader.LoadResult loadResult = CommercialDefinitionLoader.loadForBuilding(building);
-        CommercialDefinition definition = loadResult.definition();
         if (building == null) {
             setStatus(manager, data, "gui.simukraft.commercial.status.no_building", "");
             runtime.nextTick = gameTime + IDLE_RETRY_TICKS;
             return;
         }
+        CommercialDefinitionLoader.LoadResult loadResult = CommercialDefinitionLoader.loadForBuilding(building);
+        CommercialDefinition definition = loadResult.definition();
         if (!loadResult.valid() || definition == null) {
             setStatus(manager, data, "gui.simukraft.commercial.status.invalid_definition", String.join(",", loadResult.errors()));
             runtime.nextTick = gameTime + IDLE_RETRY_TICKS;

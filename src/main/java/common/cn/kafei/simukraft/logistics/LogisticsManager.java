@@ -31,6 +31,7 @@ public final class LogisticsManager extends SavedData {
     private final ConcurrentMap<UUID, Set<UUID>> clientsByCity = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, LogisticsChannelData> channels = new ConcurrentHashMap<>();
     private final ConcurrentMap<UUID, Set<UUID>> channelsByWarehouse = new ConcurrentHashMap<>();
+    private volatile long channelVersion;
     private volatile boolean sqliteLoaded;
     private volatile ServerLevel level;
 
@@ -279,8 +280,13 @@ public final class LogisticsManager extends SavedData {
         replaceClient(clients.get(data.clientId()), data);
     }
 
+    public long getChannelVersion() {
+        return channelVersion;
+    }
+
     private void putLoadedChannel(LogisticsChannelData data) {
         LogisticsChannelData old = channels.put(data.channelId(), data);
+        channelVersion++;
         if (old != null && old.warehouseId() != null) {
             Set<UUID> oldIds = channelsByWarehouse.get(old.warehouseId());
             if (oldIds != null) {
@@ -355,6 +361,7 @@ public final class LogisticsManager extends SavedData {
 
     private void removeChannelInMemory(UUID channelId) {
         LogisticsChannelData removed = channels.remove(channelId);
+        channelVersion++;
         if (removed != null && removed.warehouseId() != null) {
             Set<UUID> ids = channelsByWarehouse.get(removed.warehouseId());
             if (ids != null) {

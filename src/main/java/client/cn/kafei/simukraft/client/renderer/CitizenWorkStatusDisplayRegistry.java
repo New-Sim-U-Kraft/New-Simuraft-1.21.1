@@ -39,6 +39,7 @@ public final class CitizenWorkStatusDisplayRegistry {
     private static final String COMMERCIAL_STATUS_PREFIX = "gui.simukraft.commercial.status.";
 
     private static final CopyOnWriteArrayList<Entry> ENTRIES = new CopyOnWriteArrayList<>();
+    private static volatile List<Entry> SORTED_SNAPSHOT = List.of();
 
     static {
         register("dead_status", PRIORITY_LIFE_STATE, workStatus(WORK_STATUS_DEAD));
@@ -57,6 +58,13 @@ public final class CitizenWorkStatusDisplayRegistry {
             String workStatus = context.workStatus();
             return Optional.of(localizedOrLiteral(isBlank(workStatus) ? WORK_STATUS_IDLE : workStatus));
         });
+        rebuildSnapshot();
+    }
+
+    private static void rebuildSnapshot() {
+        List<Entry> s = new ArrayList<>(ENTRIES);
+        s.sort(Comparator.comparingInt(Entry::priority).reversed());
+        SORTED_SNAPSHOT = List.copyOf(s);
     }
 
     private CitizenWorkStatusDisplayRegistry() {
@@ -69,6 +77,7 @@ public final class CitizenWorkStatusDisplayRegistry {
         }
         ENTRIES.removeIf(entry -> entry.id().equals(id));
         ENTRIES.add(new Entry(id, priority, provider));
+        rebuildSnapshot();
     }
 
     /** registerLabelPrefix: 按 statusLabel 前缀注册一组工作状态文本。 */
@@ -83,6 +92,7 @@ public final class CitizenWorkStatusDisplayRegistry {
     public static void unregister(String id) {
         if (id != null && !id.isBlank()) {
             ENTRIES.removeIf(entry -> entry.id().equals(id));
+            rebuildSnapshot();
         }
     }
 
@@ -100,9 +110,7 @@ public final class CitizenWorkStatusDisplayRegistry {
     }
 
     private static Component resolve(WorkStatusContext context) {
-        List<Entry> entries = new ArrayList<>(ENTRIES);
-        entries.sort(Comparator.comparingInt(Entry::priority).reversed());
-        for (Entry entry : entries) {
+        for (Entry entry : SORTED_SNAPSHOT) {
             Optional<Component> component = entry.provider().resolve(context)
                     .filter(text -> text != null && !text.getString().isBlank());
             if (component.isPresent()) {

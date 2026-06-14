@@ -68,6 +68,10 @@ public final class ClientCityChunkCache {
         return Map.copyOf(currentScopeCache().allCityCores);
     }
 
+    public CityCoreEntry getCityCore(UUID cityId) {
+        return cityId != null ? currentScopeCache().allCityCores.get(cityId) : null;
+    }
+
     public UUID getCurrentCityId() {
         return currentScopeCache().currentCityId;
     }

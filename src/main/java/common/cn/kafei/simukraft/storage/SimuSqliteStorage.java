@@ -306,6 +306,13 @@ public final class SimuSqliteStorage {
         }
     }
 
+    public static void saveCommercialStockEntries(ServerLevel level, java.util.List<CompoundTag> stockTags) {
+        SimuSqliteStorage storage = openSafely(level);
+        if (storage != null && stockTags != null && !stockTags.isEmpty()) {
+            storage.commercial.upsertStockEntries(stockTags);
+        }
+    }
+
     public static void deleteCommercialStockAtBox(ServerLevel level, long boxPosLong) {
         SimuSqliteStorage storage = openSafely(level);
         if (storage != null) {

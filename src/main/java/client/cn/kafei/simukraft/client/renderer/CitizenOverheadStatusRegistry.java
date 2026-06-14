@@ -19,11 +19,19 @@ public final class CitizenOverheadStatusRegistry {
     public static final int PRIORITY_HUNGER = 100;
 
     private static final CopyOnWriteArrayList<Entry> ENTRIES = new CopyOnWriteArrayList<>();
+    private static volatile List<Entry> SORTED_SNAPSHOT = List.of();
 
     static {
         register("name", PRIORITY_NAME, entity -> Optional.of(new StatusLine(entity.getDisplayName(), 0xFFFFFF, 0.025F)));
         register("work_status", PRIORITY_WORK_STATUS, entity -> Optional.of(new StatusLine(CitizenWorkStatusDisplayRegistry.resolve(entity), 0xFFFF00, 0.02F)));
         register("hunger", PRIORITY_HUNGER, entity -> Optional.of(new StatusLine(Component.translatable(entity.getHungerLevelKey()), 0xFFFF00, 0.02F)));
+        rebuildSnapshot();
+    }
+
+    private static void rebuildSnapshot() {
+        List<Entry> s = new ArrayList<>(ENTRIES);
+        s.sort(Comparator.comparingInt(Entry::priority).reversed());
+        SORTED_SNAPSHOT = List.copyOf(s);
     }
 
     private CitizenOverheadStatusRegistry() {
@@ -36,12 +44,14 @@ public final class CitizenOverheadStatusRegistry {
         }
         ENTRIES.removeIf(entry -> entry.id().equals(id));
         ENTRIES.add(new Entry(id, priority, provider));
+        rebuildSnapshot();
     }
 
     /** unregister: 移除指定 ID 的 NPC 头顶状态提供器。 */
     public static void unregister(String id) {
         if (id != null && !id.isBlank()) {
             ENTRIES.removeIf(entry -> entry.id().equals(id));
+            rebuildSnapshot();
         }
     }
 
@@ -50,10 +60,8 @@ public final class CitizenOverheadStatusRegistry {
         if (entity == null) {
             return List.of();
         }
-        List<Entry> entries = new ArrayList<>(ENTRIES);
-        entries.sort(Comparator.comparingInt(Entry::priority).reversed());
-        List<StatusLine> lines = new ArrayList<>(entries.size());
-        for (Entry entry : entries) {
+        List<StatusLine> lines = new ArrayList<>(SORTED_SNAPSHOT.size());
+        for (Entry entry : SORTED_SNAPSHOT) {
             entry.provider().resolve(entity)
                     .filter(StatusLine::isVisible)
                     .ifPresent(lines::add);

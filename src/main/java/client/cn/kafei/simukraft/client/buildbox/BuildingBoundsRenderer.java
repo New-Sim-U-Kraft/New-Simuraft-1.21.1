@@ -173,21 +173,22 @@ public final class BuildingBoundsRenderer {
         final double minY = -64 - cameraPos.y;
         final double maxY = 320 - cameraPos.y;
         for (long chunkLong : cityChunks) {
-            net.minecraft.world.level.ChunkPos chunkPos = new net.minecraft.world.level.ChunkPos(chunkLong);
-            double minX = chunkPos.getMinBlockX() - cameraPos.x;
-            double maxX = chunkPos.getMaxBlockX() + 1 - cameraPos.x;
-            double minZ = chunkPos.getMinBlockZ() - cameraPos.z;
-            double maxZ = chunkPos.getMaxBlockZ() + 1 - cameraPos.z;
-            if (isBoundaryFace(cityChunks, chunkPos.x, chunkPos.z - 1)) {
+            int cx = net.minecraft.world.level.ChunkPos.getX(chunkLong);
+            int cz = net.minecraft.world.level.ChunkPos.getZ(chunkLong);
+            double minX = (cx << 4) - cameraPos.x;
+            double maxX = (cx << 4) + 16 - cameraPos.x;
+            double minZ = (cz << 4) - cameraPos.z;
+            double maxZ = (cz << 4) + 16 - cameraPos.z;
+            if (isBoundaryFace(cityChunks, cx, cz - 1)) {
                 drawQuad(buffer, matrix, minX, minY, minZ, maxX, minY, minZ, maxX, maxY, minZ, minX, maxY, minZ, red, green, blue, alpha);
             }
-            if (isBoundaryFace(cityChunks, chunkPos.x, chunkPos.z + 1)) {
+            if (isBoundaryFace(cityChunks, cx, cz + 1)) {
                 drawQuad(buffer, matrix, maxX, minY, maxZ, minX, minY, maxZ, minX, maxY, maxZ, maxX, maxY, maxZ, red, green, blue, alpha);
             }
-            if (isBoundaryFace(cityChunks, chunkPos.x - 1, chunkPos.z)) {
+            if (isBoundaryFace(cityChunks, cx - 1, cz)) {
                 drawQuad(buffer, matrix, minX, minY, maxZ, minX, minY, minZ, minX, maxY, minZ, minX, maxY, maxZ, red, green, blue, alpha);
             }
-            if (isBoundaryFace(cityChunks, chunkPos.x + 1, chunkPos.z)) {
+            if (isBoundaryFace(cityChunks, cx + 1, cz)) {
                 drawQuad(buffer, matrix, maxX, minY, minZ, maxX, minY, maxZ, maxX, maxY, maxZ, maxX, maxY, minZ, red, green, blue, alpha);
             }
         }

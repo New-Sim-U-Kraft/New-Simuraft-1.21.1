@@ -3,20 +3,23 @@ package common.cn.kafei.simukraft.commercial;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 public final class CommercialStockService {
     private CommercialStockService() {
     }
 
-    /** ensureStock: 确保商业定义中的库存条目已经初始化。 */
-    public static void ensureStock(ServerLevel level, BlockPos boxPos, CommercialDefinition definition) {
+    /** restock: 按服务器运行 tick 间隔补货，单次事务批量持久化所有变更。 */
+    public static void restock(ServerLevel level, BlockPos boxPos, CommercialDefinition definition) {
         if (level == null || boxPos == null || definition == null) {
             return;
         }
         CommercialStockManager manager = CommercialStockManager.get(level);
         long gameTime = level.getGameTime();
+        List<CommercialStockData> dirty = new ArrayList<>();
         for (CommercialOffer.StockRule rule : uniqueStockRules(definition).values()) {
             CommercialStockData stock = manager.getOrCreate(boxPos, rule, gameTime);
             boolean changed = false;
@@ -28,44 +31,29 @@ public final class CommercialStockService {
                 stock.setLastRestockGameTime(gameTime);
                 changed = true;
             }
+            if (rule.restockEnabled()) {
+                long lastRestock = stock.lastRestockGameTime();
+                if (gameTime < lastRestock) {
+                    stock.setLastRestockGameTime(gameTime);
+                    changed = true;
+                } else {
+                    long elapsed = gameTime - lastRestock;
+                    long passed = elapsed / rule.restockInterval();
+                    if (passed > 0L) {
+                        int added = stock.add(safeRestockAmount(passed, rule.restockAmount()));
+                        stock.setLastRestockGameTime(lastRestock + passed * rule.restockInterval());
+                        if (added > 0 || passed > 0) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
             if (changed) {
-                manager.persist(stock);
+                dirty.add(stock);
             }
         }
-    }
-
-    /** restock: 按服务器运行 tick 间隔补货。 */
-    public static void restock(ServerLevel level, BlockPos boxPos, CommercialDefinition definition) {
-        if (level == null || boxPos == null || definition == null) {
-            return;
-        }
-        ensureStock(level, boxPos, definition);
-        CommercialStockManager manager = CommercialStockManager.get(level);
-        long gameTime = level.getGameTime();
-        for (CommercialOffer.StockRule rule : uniqueStockRules(definition).values()) {
-            if (!rule.restockEnabled()) {
-                continue;
-            }
-            CommercialStockData stock = manager.get(boxPos, rule.itemId());
-            if (stock == null) {
-                continue;
-            }
-            long lastRestock = stock.lastRestockGameTime();
-            if (gameTime < lastRestock) {
-                stock.setLastRestockGameTime(gameTime);
-                manager.persist(stock);
-                continue;
-            }
-            long elapsed = gameTime - lastRestock;
-            long passed = elapsed / rule.restockInterval();
-            if (passed <= 0L) {
-                continue;
-            }
-            int added = stock.add(safeRestockAmount(passed, rule.restockAmount()));
-            stock.setLastRestockGameTime(lastRestock + passed * rule.restockInterval());
-            if (added > 0 || passed > 0) {
-                manager.persist(stock);
-            }
+        if (!dirty.isEmpty()) {
+            manager.persistBatch(dirty);
         }
     }
 

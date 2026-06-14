@@ -21,6 +21,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 @SuppressWarnings("null")
 public final class LogisticsWorkService {
     private static final ConcurrentMap<String, AtomicInteger> CURSORS = new ConcurrentHashMap<>();
+    private static volatile List<LogisticsChannelData> cachedChannels = List.of();
+    private static volatile long cachedChannelVersion = Long.MIN_VALUE;
+    private static volatile String cachedChannelLevelKey = "";
 
     private LogisticsWorkService() {
     }
@@ -34,14 +37,25 @@ public final class LogisticsWorkService {
         if (level.getGameTime() % interval != 0L) {
             return;
         }
-        List<LogisticsChannelData> channels = LogisticsManager.get(level).allChannels().stream()
-                .filter(LogisticsChannelData::enabled)
-                .sorted(Comparator.comparing(LogisticsChannelData::updatedAt))
-                .toList();
+        LogisticsManager manager = LogisticsManager.get(level);
+        String levelKey = SaveScopedCacheKey.levelKey(level);
+        long channelVersion = manager.getChannelVersion();
+        List<LogisticsChannelData> channels;
+        if (channelVersion == cachedChannelVersion && levelKey.equals(cachedChannelLevelKey)) {
+            channels = cachedChannels;
+        } else {
+            channels = manager.allChannels().stream()
+                    .filter(LogisticsChannelData::enabled)
+                    .sorted(Comparator.comparing(LogisticsChannelData::updatedAt))
+                    .toList();
+            cachedChannels = channels;
+            cachedChannelVersion = channelVersion;
+            cachedChannelLevelKey = levelKey;
+        }
         if (channels.isEmpty()) {
             return;
         }
-        AtomicInteger cursor = CURSORS.computeIfAbsent(SaveScopedCacheKey.levelKey(level), ignored -> new AtomicInteger());
+        AtomicInteger cursor = CURSORS.computeIfAbsent(levelKey, ignored -> new AtomicInteger());
         int start = Math.floorMod(cursor.get(), channels.size());
         int maxChannels = Math.min(channels.size(), Math.max(1, ServerConfig.logisticsMaxChannelsPerTick()));
         int maxTransfers = Math.max(1, ServerConfig.logisticsMaxTransfersPerTick());
@@ -61,6 +75,9 @@ public final class LogisticsWorkService {
     public static void clearServerCaches(MinecraftServer server) {
         String serverKey = SaveScopedCacheKey.serverKey(server);
         CURSORS.keySet().removeIf(key -> key.startsWith(serverKey + "|"));
+        cachedChannels = List.of();
+        cachedChannelVersion = Long.MIN_VALUE;
+        cachedChannelLevelKey = "";
     }
 
     private static boolean transferOne(ServerLevel level, LogisticsChannelData channel) {

@@ -9,6 +9,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -89,6 +90,23 @@ public final class CommercialStockManager extends SavedData {
     public CommercialStockData getOrCreate(BlockPos boxPos, CommercialOffer.StockRule rule, long gameTime) {
         return stock.computeIfAbsent(boxPos.immutable(), ignored -> new ConcurrentHashMap<>())
                 .computeIfAbsent(rule.itemId(), ignored -> new CommercialStockData(boxPos, rule.itemId(), rule.initial(), rule.max(), gameTime));
+    }
+
+    /** persistBatch: 批量持久化多个库存条目（单次事务写入）。 */
+    public void persistBatch(List<CommercialStockData> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return;
+        }
+        List<net.minecraft.nbt.CompoundTag> tags = new ArrayList<>(entries.size());
+        for (CommercialStockData data : entries) {
+            data.touch();
+            stock.computeIfAbsent(data.boxPos(), ignored -> new ConcurrentHashMap<>()).put(data.itemId(), data);
+            tags.add(data.toTag());
+        }
+        setDirty();
+        if (level != null) {
+            common.cn.kafei.simukraft.storage.SimuSqliteStorage.saveCommercialStockEntries(level, tags);
+        }
     }
 
     /** persist: 持久化单个库存条目。 */

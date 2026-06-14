@@ -52,7 +52,7 @@ public final class CityEntryHud {
             lastCityId = cityId;
             return;
         }
-        ClientCityChunkCache.CityCoreEntry entry = cache.getAllCityCores().get(cityId);
+        ClientCityChunkCache.CityCoreEntry entry = cache.getCityCore(cityId);
         if (entry != null && !entry.cityName().isBlank()) {
             show(entry.cityName());
         }

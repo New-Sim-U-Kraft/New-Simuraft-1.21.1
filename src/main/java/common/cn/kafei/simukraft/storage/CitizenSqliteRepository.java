@@ -80,43 +80,45 @@ public final class CitizenSqliteRepository {
     public synchronized CompoundTag loadAll() {
         CompoundTag tag = new CompoundTag();
         ListTag citizens = new ListTag();
-        try (Connection connection = database.openConnection();
-             PreparedStatement statement = connection.prepareStatement("SELECT * FROM citizens ORDER BY uuid");
-             ResultSet resultSet = statement.executeQuery()) {
-            while (resultSet.next()) {
-                String uuid = resultSet.getString("uuid");
-                CompoundTag citizen = new CompoundTag();
-                citizen.putUUID("Uuid", java.util.UUID.fromString(uuid));
-                citizen.putString("Name", resultSet.getString("name"));
-                citizen.putString("Gender", resultSet.getString("gender"));
-                citizen.putInt("Age", resultSet.getInt("age"));
-                citizen.putInt("Lifespan", resultSet.getInt("lifespan"));
-                citizen.putString("JobType", resultSet.getString("job_type"));
-                citizen.putString("JobId", resultSet.getString("job_id"));
-                citizen.putString("Status", resultSet.getString("status"));
-                citizen.putString("WorkStatus", resultSet.getString("work_status"));
-                citizen.putString("WorkNeedDetail", resultSet.getString("work_need_detail"));
-                citizen.putString("StatusLabel", resultSet.getString("status_label"));
-                citizen.putBoolean("IsWorking", resultSet.getInt("is_working") != 0);
-                citizen.putInt("NpcId", resultSet.getInt("npc_id"));
-                citizen.putString("SkinPath", resultSet.getString("skin_path"));
-                SqliteNbtHelper.putNullableUuid(citizen, "CityId", resultSet.getString("city_id"));
-                SqliteNbtHelper.putNullableUuid(citizen, "HomeId", resultSet.getString("home_id"));
-                SqliteNbtHelper.putNullableUuid(citizen, "WorkplaceId", resultSet.getString("workplace_id"));
-                long workplacePosLong = resultSet.getLong("workplace_pos_long");
-                if (!resultSet.wasNull()) {
-                    citizen.putLong("WorkplacePos", workplacePosLong);
+        try (Connection connection = database.openConnection()) {
+            java.util.Map<String, CompoundTag> skillsByUuid = loadAllCitizenSkills(connection);
+            try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM citizens ORDER BY uuid");
+                 ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String uuid = resultSet.getString("uuid");
+                    CompoundTag citizen = new CompoundTag();
+                    citizen.putUUID("Uuid", java.util.UUID.fromString(uuid));
+                    citizen.putString("Name", resultSet.getString("name"));
+                    citizen.putString("Gender", resultSet.getString("gender"));
+                    citizen.putInt("Age", resultSet.getInt("age"));
+                    citizen.putInt("Lifespan", resultSet.getInt("lifespan"));
+                    citizen.putString("JobType", resultSet.getString("job_type"));
+                    citizen.putString("JobId", resultSet.getString("job_id"));
+                    citizen.putString("Status", resultSet.getString("status"));
+                    citizen.putString("WorkStatus", resultSet.getString("work_status"));
+                    citizen.putString("WorkNeedDetail", resultSet.getString("work_need_detail"));
+                    citizen.putString("StatusLabel", resultSet.getString("status_label"));
+                    citizen.putBoolean("IsWorking", resultSet.getInt("is_working") != 0);
+                    citizen.putInt("NpcId", resultSet.getInt("npc_id"));
+                    citizen.putString("SkinPath", resultSet.getString("skin_path"));
+                    SqliteNbtHelper.putNullableUuid(citizen, "CityId", resultSet.getString("city_id"));
+                    SqliteNbtHelper.putNullableUuid(citizen, "HomeId", resultSet.getString("home_id"));
+                    SqliteNbtHelper.putNullableUuid(citizen, "WorkplaceId", resultSet.getString("workplace_id"));
+                    long workplacePosLong = resultSet.getLong("workplace_pos_long");
+                    if (!resultSet.wasNull()) {
+                        citizen.putLong("WorkplacePos", workplacePosLong);
+                    }
+                    citizen.putDouble("Health", resultSet.getDouble("health"));
+                    citizen.putDouble("Happiness", resultSet.getDouble("happiness"));
+                    citizen.putBoolean("Sick", resultSet.getInt("sick") != 0);
+                    citizen.putBoolean("Child", resultSet.getInt("child") != 0);
+                    citizen.putLong("ChildGrowthDueDay", resultSet.getLong("child_growth_due_day"));
+                    citizen.putLong("BornDay", resultSet.getLong("born_day"));
+                    String dimId = resultSet.getString("dimension_id");
+                    citizen.putString("DimensionId", dimId != null ? dimId : "minecraft:overworld");
+                    citizen.put("Skills", skillsByUuid.getOrDefault(uuid, new CompoundTag()));
+                    citizens.add(citizen);
                 }
-                citizen.putDouble("Health", resultSet.getDouble("health"));
-                citizen.putDouble("Happiness", resultSet.getDouble("happiness"));
-                citizen.putBoolean("Sick", resultSet.getInt("sick") != 0);
-                citizen.putBoolean("Child", resultSet.getInt("child") != 0);
-                citizen.putLong("ChildGrowthDueDay", resultSet.getLong("child_growth_due_day"));
-                citizen.putLong("BornDay", resultSet.getLong("born_day"));
-                String dimId = resultSet.getString("dimension_id");
-                citizen.putString("DimensionId", dimId != null ? dimId : "minecraft:overworld");
-                citizen.put("Skills", loadCitizenSkills(connection, uuid));
-                citizens.add(citizen);
             }
             tag.put("Citizens", citizens);
             return tag;
@@ -173,6 +175,18 @@ public final class CitizenSqliteRepository {
             }
             skillStatement.executeBatch();
         }
+    }
+
+    private java.util.Map<String, CompoundTag> loadAllCitizenSkills(Connection connection) throws SQLException {
+        java.util.Map<String, CompoundTag> result = new java.util.HashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement("SELECT citizen_id, skill_key, skill_value FROM citizen_skills ORDER BY citizen_id");
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                result.computeIfAbsent(resultSet.getString("citizen_id"), ignored -> new CompoundTag())
+                        .putInt(resultSet.getString("skill_key"), resultSet.getInt("skill_value"));
+            }
+        }
+        return result;
     }
 
     private CompoundTag loadCitizenSkills(Connection connection, String uuid) throws SQLException {

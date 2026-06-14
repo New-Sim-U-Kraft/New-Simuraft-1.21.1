@@ -27,6 +27,9 @@ public class SimuMapRegionData {
     /** 数据是否被修改，需要重新渲染。 */
     private volatile boolean dirty = true;
 
+    /** 是否有任何非空白数据，O(1) 快速判断。 */
+    private boolean hasAnyData = false;
+
     /** 该数据所属 region 坐标。 */
     public final int regionX;
     public final int regionZ;
@@ -53,6 +56,7 @@ public class SimuMapRegionData {
         color[idx] = argbColor;
         flags[idx] = f;
         dirty = true;
+        hasAnyData = true;
     }
 
     /** 获取指定位置的高度。 */
@@ -92,10 +96,7 @@ public class SimuMapRegionData {
 
     /** 检查该 region 是否完全空白。 */
     public boolean isEmpty() {
-        for (short h : height) {
-            if (h != HEIGHT_UNKNOWN) return false;
-        }
-        return true;
+        return !hasAnyData;
     }
 
     /** 获取该 region 起点的世界 X 坐标。 */

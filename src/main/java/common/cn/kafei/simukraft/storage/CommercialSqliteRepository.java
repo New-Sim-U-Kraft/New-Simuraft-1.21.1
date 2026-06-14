@@ -9,6 +9,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -106,6 +107,27 @@ public final class CommercialSqliteRepository {
             }
         } catch (SQLException exception) {
             SimuKraft.LOGGER.error("Failed to save commercial stock to SQLite", exception);
+        }
+    }
+
+    /** upsertStockEntries: 批量保存多个商业库存条目（单次事务）。 */
+    public synchronized void upsertStockEntries(List<CompoundTag> stockTags) {
+        if (stockTags == null || stockTags.isEmpty()) {
+            return;
+        }
+        try (Connection connection = database.openConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                for (CompoundTag stockTag : stockTags) {
+                    saveStockEntry(connection, stockTag);
+                }
+                connection.commit();
+            } catch (SQLException exception) {
+                connection.rollback();
+                throw exception;
+            }
+        } catch (SQLException exception) {
+            SimuKraft.LOGGER.error("Failed to save commercial stock entries to SQLite", exception);
         }
     }
 
